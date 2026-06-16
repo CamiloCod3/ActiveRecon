@@ -8,11 +8,25 @@ from .modules.report_generator import generate_report
 from .modules.config_loader import load_config
 
 
-# Load configuration
 CONFIG = load_config()
 
-# Set up logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+
+def _is_http_service(port):
+    service = str(port.get("service", "")).lower()
+    state = str(port.get("state", "")).lower()
+    portid = str(port.get("portid", ""))
+
+    if state and state != "open":
+        return False
+
+    return "http" in service or portid in {"80", "443", "8080", "8443"}
+
+
+def _get_http_ports(nmap_results):
+    ports = nmap_results.get("ports", []) if isinstance(nmap_results, dict) else []
+    return [port for port in ports if _is_http_service(port)]
 
 
 def main():
@@ -20,16 +34,16 @@ def main():
     parser.add_argument("--target", required=True, help="Target IP or domain")
     parser.add_argument("--output", default="report.md", help="Output file for the report")
 
-    # Load scan profiles from config.yaml
     scan_profile_choices = list(CONFIG["scan_profiles"].keys())
-    parser.add_argument("--scan-profile",
-                        default="fast",
-                        choices=scan_profile_choices,
-                        help="Choose a pre-defined Nmap profile from config.yaml")
+    parser.add_argument(
+        "--scan-profile",
+        default="fast",
+        choices=scan_profile_choices,
+        help="Choose a pre-defined Nmap profile from config.yaml",
+    )
 
     args = parser.parse_args()
 
-    # Fetch chosen profile
     chosen_profile = args.scan_profile
     scan_command = CONFIG["scan_profiles"][chosen_profile]
 
@@ -39,39 +53,39 @@ def main():
     logging.info(f"Starting automated recon on target: {target}")
     logging.info(f"Using scan profile: {chosen_profile} ({scan_command})")
 
-    # Step 1: Run Nmap Scan
     try:
         nmap_results = run_nmap_scan(target, scan_command)
-        results['Nmap Scan'] = nmap_results
-        logging.info(f"Nmap scan completed successfully. Found {len(nmap_results.get('ports', []))} ports.")
+        if not isinstance(nmap_results, dict):
+            nmap_results = {"target": target, "ports": [], "error": "Nmap scan returned invalid results"}
+        results["Nmap Scan"] = nmap_results
+        if nmap_results.get("error"):
+            logging.error(f"Nmap scan completed with errors: {nmap_results['error']}")
+        else:
+            logging.info(f"Nmap scan completed successfully. Found {len(nmap_results.get('ports', []))} ports.")
     except Exception as e:
         logging.error(f"Error during Nmap scan: {e}")
-        results['Nmap Scan'] = {"error": "Nmap scan failed"}
+        nmap_results = {"target": target, "ports": [], "error": f"Nmap scan failed: {e}"}
+        results["Nmap Scan"] = nmap_results
 
-    # Step 2: HTTP Enumeration
-    http_ports = [
-        port['portid'] for port in nmap_results.get('ports', [])
-        if port['service'] == 'http' or port['service'] == 'https'
-    ]
+    http_ports = _get_http_ports(nmap_results)
     if http_ports:
         try:
-            logging.info(f"HTTP ports found: {http_ports}. Running HTTP analysis.")
-            results['HTTP Analysis'] = analyze_http(target, CONFIG, http_ports)
+            logging.info(f"HTTP services found: {http_ports}. Running HTTP analysis.")
+            results["HTTP Analysis"] = analyze_http(target, CONFIG, http_ports)
         except Exception as e:
             logging.error(f"Error during HTTP analysis: {e}")
-            results['HTTP Analysis'] = {"error": "HTTP analysis failed"}
+            results["HTTP Analysis"] = {"error": f"HTTP analysis failed: {e}"}
     else:
         logging.info("No HTTP ports found. Skipping HTTP analysis.")
+        results["HTTP Analysis"] = []
 
-    # Step 3: DNS Analysis
     try:
         logging.info("Running DNS analysis.")
-        results['DNS Analysis'] = analyze_dns(target)
+        results["DNS Analysis"] = analyze_dns(target)
     except Exception as e:
         logging.error(f"Error during DNS analysis: {e}")
-        results['DNS Analysis'] = {"error": "DNS analysis failed"}
+        results["DNS Analysis"] = {"error": f"DNS analysis failed: {e}"}
 
-    # Step 4: Generate the Report
     try:
         generate_report(target, results, args.output)
         logging.info(f"Recon completed successfully! Report saved to {args.output}")
@@ -81,4 +95,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
