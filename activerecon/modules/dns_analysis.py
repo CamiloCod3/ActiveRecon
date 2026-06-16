@@ -1,5 +1,15 @@
-import dns.resolver
 import logging
+
+import dns.resolver
+
+
+def _record_value(record_type, answer):
+    if record_type == "A":
+        return answer.address
+    if record_type == "MX":
+        return answer.exchange.to_text()
+    return answer.to_text()
+
 
 def analyze_dns(target):
     """
@@ -7,11 +17,20 @@ def analyze_dns(target):
     """
     logging.info("Starting DNS analysis")
     dns_records = {}
-    try:
-        dns_records['A'] = [answer.address for answer in dns.resolver.resolve(target, "A")]
-        dns_records['MX'] = [answer.exchange.to_text() for answer in dns.resolver.resolve(target, "MX")]
-        dns_records['TXT'] = [answer.to_text() for answer in dns.resolver.resolve(target, "TXT")]
-    except Exception as e:
-        logging.error(f"DNS analysis failed: {e}")
-    return dns_records
+    errors = {}
 
+    for record_type in ("A", "MX", "TXT"):
+        try:
+            dns_records[record_type] = [
+                _record_value(record_type, answer)
+                for answer in dns.resolver.resolve(target, record_type)
+            ]
+        except Exception as e:
+            logging.error(f"DNS {record_type} lookup failed: {e}")
+            dns_records[record_type] = []
+            errors[record_type] = str(e)
+
+    if errors:
+        dns_records["errors"] = errors
+
+    return dns_records

@@ -3,3 +3,4 @@ scan_profiles:
   standard: "-Pn -n -sS -sV -sC -T3"
   full: "-Pn -n -sS -p- -sV -sC -T4"
   udp: "-Pn -n -sU --top-ports 100 -sC --script-timeout 5m"
+http_timeout: 5

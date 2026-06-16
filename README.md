@@ -2,41 +2,48 @@
 
 ActiveRecon is an automated reconnaissance tool that combines Nmap scanning, DNS analysis, and HTTP analysis.
 
+Only scan systems that you own or have explicit permission to assess.
+
 ## Features
 
-- **Nmap Scanning**: Execute various predefined profiles for fast and comprehensive port scanning.
-- **DNS Analysis**: Query A, MX, and TXT records for a target.
-- **HTTP Analysis**: Identify HTTP services and fetch basic details.
+- **Nmap Scanning**: Execute predefined profiles for fast, standard, full, or UDP scanning.
+- **DNS Analysis**: Query A, MX, and TXT records independently.
+- **HTTP Analysis**: Identify HTTP services from Nmap results and fetch basic status/header details.
+- **Markdown Reports**: Save Nmap, HTTP, DNS, and error details in one report.
 
 ## Installation
 
 ### Prerequisites
 
 - **Python 3.6 or later**
-- **Nmap**: Install Nmap using the following command:
+- **Nmap**
 
-    ```bash
-    sudo apt-get install nmap
-    ```
+Install Nmap on Debian/Ubuntu:
+
+```bash
+sudo apt-get install nmap
+```
 
 ### Install from GitHub
 
-1. Clone the repository:
-
-    ```bash
-    git clone https://github.com/your-username/activerecon.git
-    cd activerecon
-    ```
-
-2. Install the package with pip:
-
-    ```bash
-    pip install .
-    ```
+```bash
+git clone https://github.com/CamiloCod3/ActiveRecon.git
+cd ActiveRecon
+pip install .
+```
 
 ## Usage
 
-Once installed, you can run the tool as a command-line utility:
+Run ActiveRecon as a command-line utility:
 
 ```bash
 activerecon --target <IP_OR_DOMAIN> --scan-profile <PROFILE> --output <OUTPUT_FILE>
+```
+
+Example:
+
+```bash
+activerecon --target example.com --scan-profile fast --output report.md
+```
+
+Available scan profiles are configured in `activerecon/modules/config/config.yaml`.
