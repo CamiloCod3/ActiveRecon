@@ -7,8 +7,8 @@ def test_generate_attention_findings_reports_http_headers_and_sensitive_ports():
     results = {
         "Nmap Scan": {
             "ports": [
-                {"portid": "23", "service": "telnet"},
-                {"portid": "443", "service": "https"},
+                {"portid": "23", "service": "telnet", "state": "open"},
+                {"portid": "443", "service": "https", "state": "open"},
             ],
         },
         "HTTP Analysis": [{
@@ -26,6 +26,27 @@ def test_generate_attention_findings_reports_http_headers_and_sensitive_ports():
     assert "Missing Content-Security-Policy header" in messages
     assert "HTTP redirects observed" in messages
     assert "DNS MX lookup returned no usable result" in messages
+
+
+def test_generate_attention_findings_only_reports_open_http_ports():
+    results = {
+        "Nmap Scan": {
+            "ports": [
+                {"portid": "3000", "service": "ppp", "state": "open"},
+                {"portid": "8080", "service": "http", "state": "closed"},
+                {"portid": "8443", "service": "https", "state": "filtered"},
+                {"portid": "23", "service": "telnet", "state": "closed"},
+            ],
+        },
+    }
+
+    findings = generate_attention_findings(results)
+    messages = [item["message"] for item in findings]
+
+    assert "HTTP service detected on port 3000" in messages
+    assert "HTTP service detected on port 8080" not in messages
+    assert "HTTP service detected on port 8443" not in messages
+    assert "Sensitive remote access service exposed on port 23" not in messages
 
 
 def test_generate_attention_findings_reports_expired_tls_certificates():

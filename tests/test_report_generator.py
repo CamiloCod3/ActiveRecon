@@ -85,3 +85,23 @@ def test_generate_report_creates_parent_directories(tmp_path):
     generate_report("example.com", {"Nmap Scan": {"status": {}, "scan_info": {}, "ports": []}}, str(output))
 
     assert output.exists()
+
+
+def test_generate_report_shows_dns_skip_reason(tmp_path):
+    output = tmp_path / "report.md"
+    results = {
+        "Nmap Scan": {"status": {"state": "up"}, "scan_info": {}, "ports": []},
+        "DNS Analysis": {
+            "skipped": True,
+            "reason": "DNS analysis skipped for IP address target",
+            "A": [],
+            "MX": [],
+            "TXT": [],
+        },
+    }
+
+    generate_report("127.0.0.1", results, str(output))
+
+    content = output.read_text(encoding="utf-8")
+    assert "**Skipped:** DNS analysis skipped for IP address target" in content
+    assert "Lookup Error" not in content

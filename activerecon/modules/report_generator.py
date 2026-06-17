@@ -131,6 +131,8 @@ def generate_report(target, results, output_file):
         f.write("## DNS Analysis\n\n")
         if isinstance(dns_results, dict) and dns_results.get("error"):
             f.write(f"**Error:** {dns_results['error']}\n")
+        elif isinstance(dns_results, dict) and dns_results.get("skipped"):
+            f.write(f"**Skipped:** {dns_results.get('reason', 'DNS analysis skipped')}\n")
         elif dns_results:
             dns_errors = dns_results.get("errors", {})
             for record_type in ("A", "MX", "TXT"):

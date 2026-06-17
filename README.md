@@ -57,10 +57,13 @@ Query common DNS records for the target domain:
 * MX records
 * TXT records
 
+DNS analysis is skipped automatically for IP address targets such as `127.0.0.1` or `::1`.
+
 ### HTTP Analysis
 
 ActiveRecon identifies HTTP services from Nmap results and collects:
 
+* common HTTP, HTTPS, and local web development ports, even when Nmap guesses a generic service name
 * constructed HTTP/HTTPS URLs
 * status codes
 * final URL and redirect chain
