@@ -10,6 +10,7 @@ SECURITY_HEADERS = {
 }
 COMMON_HTTP_PORTS = {"80", "443", "3000", "5000", "8000", "8080", "8443", "9000", "9443"}
 WILDCARD_CORS_HEADER = "access-control-allow-origin"
+X_POWERED_BY_HEADER = "x-powered-by"
 
 
 def _finding(severity, category, message, evidence=None):
@@ -68,6 +69,12 @@ def _first_path_like_header_value(value):
     return None
 
 
+def _header_value_text(value):
+    if isinstance(value, (list, tuple, set)):
+        return ", ".join(str(item).strip() for item in value if str(item).strip())
+    return str(value).strip()
+
+
 def generate_attention_findings(results, now=None):
     findings = []
 
@@ -76,6 +83,10 @@ def generate_attention_findings(results, now=None):
         portid = str(port.get("portid", ""))
         if portid in {"21", "23", "3389"}:
             findings.append(_finding("medium", "exposure", f"Sensitive remote access service exposed on port {portid}", service))
+        elif portid == "445":
+            findings.append(_finding("medium", "exposure", "SMB service exposed on port 445", service))
+        elif portid == "135":
+            findings.append(_finding("info", "exposure", "RPC endpoint mapper observed on port 135", service))
         elif portid in COMMON_HTTP_PORTS or "http" in service:
             findings.append(_finding("info", "http", f"HTTP service detected on port {portid}", service))
 
@@ -91,8 +102,12 @@ def generate_attention_findings(results, now=None):
 
         for header_name, value in _response_headers(item).items():
             normalized_header = str(header_name).lower()
-            if normalized_header == WILDCARD_CORS_HEADER and str(value).strip() == "*":
+            header_value = _header_value_text(value)
+            if normalized_header == WILDCARD_CORS_HEADER and header_value == "*":
                 findings.append(_finding("info", "cors", "Wildcard CORS header observed", item.get("url", "")))
+            if normalized_header == X_POWERED_BY_HEADER and header_value:
+                evidence = f"{header_value} - {item.get('url', '')}".strip(" -")
+                findings.append(_finding("info", "technology", "X-Powered-By header exposed", evidence))
 
             path = _first_path_like_header_value(value)
             if path:

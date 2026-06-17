@@ -7,13 +7,21 @@ def test_generate_report_writes_nested_results(tmp_path):
         "Nmap Scan": {
             "status": {"state": "up"},
             "scan_info": {"protocol": "tcp", "numservices": "100"},
-            "host": "192.0.2.10",
-            "ports": [{
-                "portid": "80",
-                "protocol": "tcp",
-                "state": "open",
-                "service": "http",
-            }],
+            "host": "93.184.216.34",
+            "ports": [
+                {
+                    "portid": "25",
+                    "protocol": "tcp",
+                    "state": "filtered",
+                    "service": "smtp",
+                },
+                {
+                    "portid": "80",
+                    "protocol": "tcp",
+                    "state": "open",
+                    "service": "http",
+                },
+            ],
         },
         "HTTP Analysis": [{
             "url": "http://example.com:80",
@@ -59,7 +67,11 @@ def test_generate_report_writes_nested_results(tmp_path):
     assert "- **HTTP Services:** 1" in content
     assert "- **DNS Records:** 1" in content
     assert "## Port Scan Results" in content
-    assert "## Open Ports" not in content
+    assert "\n## Open Ports\n" not in content
+    assert "### Open Ports" in content
+    assert "### Other Results" in content
+    assert content.index("### Open Ports") < content.index("### Other Results")
+    assert content.index("80/tcp") < content.index("25/tcp")
     assert "## HTTP Analysis" in content
     assert "http://example.com:80" in content
     assert "- **Nmap Service:** ppp" in content
@@ -80,7 +92,7 @@ def test_generate_report_writes_nested_results(tmp_path):
     assert "TLSv1.3" in content
     assert "## Interesting Signals" in content
     assert "Missing Content-Security-Policy header" in content
-    assert "192.0.2.10" in content
+    assert "93.184.216.34" in content
     assert "Lookup Error" in content
 
 
@@ -126,3 +138,32 @@ def test_generate_report_shows_dns_skip_reason(tmp_path):
     content = output.read_text(encoding="utf-8")
     assert "**Skipped:** DNS analysis skipped for IP address target" in content
     assert "Lookup Error" not in content
+
+
+def test_generate_report_shows_scan_context_and_filters_http_hsts(tmp_path):
+    output = tmp_path / "report.md"
+    results = {
+        "Nmap Scan": {
+            "status": {"state": "up"},
+            "scan_info": {},
+            "host": "127.0.0.1",
+            "ports": [],
+        },
+        "HTTP Analysis": [{
+            "url": "http://127.0.0.1:3000",
+            "service": "ppp",
+            "status": 200,
+            "missing_security_headers": [
+                "strict-transport-security",
+                "content-security-policy",
+            ],
+        }],
+    }
+
+    generate_report("127.0.0.1", results, str(output))
+
+    content = output.read_text(encoding="utf-8")
+    assert "**Scan Context:** Target appears to be local or private." in content
+    assert "development, Docker, virtualization, or lab services" in content
+    assert "  - `content-security-policy`" in content
+    assert "strict-transport-security" not in content
