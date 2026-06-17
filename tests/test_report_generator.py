@@ -17,7 +17,12 @@ def test_generate_report_writes_nested_results(tmp_path):
         },
         "HTTP Analysis": [{
             "url": "http://example.com:80",
+            "final_url": "https://example.com/login",
             "status": 200,
+            "title": "Example App",
+            "redirect_chain": ["http://example.com:80", "https://example.com/login"],
+            "missing_security_headers": ["content-security-policy"],
+            "technology_hints": ["server:test"],
             "headers": {"Server": "test"},
         }],
         "TLS Analysis": [{
@@ -54,6 +59,17 @@ def test_generate_report_writes_nested_results(tmp_path):
     assert "- **DNS Records:** 1" in content
     assert "## HTTP Analysis" in content
     assert "http://example.com:80" in content
+    assert "- **Status:** 200" in content
+    assert "- **Title:** Example App" in content
+    assert "- **Final URL:** https://example.com/login" in content
+    assert "- **Redirect Chain:**" in content
+    assert "  - `https://example.com/login`" in content
+    assert "- **Missing Security Headers:**" in content
+    assert "  - `content-security-policy`" in content
+    assert "- **Technology Hints:**" in content
+    assert "  - `server:test`" in content
+    assert "- **Response Headers:**" in content
+    assert "  - `Server`: test" in content
     assert "## DNS Analysis" in content
     assert "## TLS Analysis" in content
     assert "TLSv1.3" in content
