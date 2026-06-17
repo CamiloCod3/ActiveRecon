@@ -5,7 +5,6 @@ import requests
 
 DEFAULT_HTTP_TIMEOUT = 5
 
-
 def _get_timeout(config):
     if isinstance(config, dict):
         return config.get("http_timeout", DEFAULT_HTTP_TIMEOUT)
