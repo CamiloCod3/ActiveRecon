@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path, PurePosixPath
 
 
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "1.1"
 TOOL_NAME = "ActiveRecon"
 AUTHORIZED_USE_NOTICE = True
 HSTS_HEADER = "strict-transport-security"
@@ -37,7 +37,14 @@ WELL_KNOWN_PATHS = {
     "/api-docs",
     "/ftp",
 }
-CATEGORY_KEYS = ("api_like", "frontend_routes", "static_assets", "well_known", "header_discovered")
+CATEGORY_KEYS = (
+    "api_like",
+    "frontend_routes",
+    "static_assets",
+    "well_known",
+    "header_discovered",
+    "realtime_services",
+)
 
 
 def _as_list(value):
@@ -87,11 +94,11 @@ def _endpoint_groups(results):
 
 
 def _endpoint_count(results):
-    total = 0
+    paths = set()
     for group in _endpoint_groups(results):
         if isinstance(group, dict):
-            total += len(_as_list(group.get("endpoints", [])))
-    return total
+            paths.update(_unique_endpoint_paths(_as_list(group.get("endpoints", []))))
+    return len(paths)
 
 
 def build_json_summary(results):
@@ -164,9 +171,28 @@ def _is_static_asset(path):
     return PurePosixPath(clean_path).suffix in STATIC_ASSET_EXTENSIONS or "chunk" in filename
 
 
+def _is_realtime_service(path):
+    clean_path = _path_without_query(path).lower().rstrip("/")
+    return (
+        clean_path == "/socket.io"
+        or clean_path == "/engine.io"
+        or clean_path.startswith(("/socket.io/", "/engine.io/"))
+    )
+
+
+def _unique_endpoint_paths(endpoints):
+    return {
+        endpoint.get("path")
+        for endpoint in endpoints
+        if isinstance(endpoint, dict) and endpoint.get("path")
+    }
+
+
 def _primary_endpoint_category(endpoint):
     path = endpoint.get("path", "")
     lower_path = _path_without_query(path).lower()
+    if _is_realtime_service(path):
+        return "realtime_services"
     if _is_static_asset(path):
         return "static_assets"
     if _is_api_like(path):
@@ -185,9 +211,9 @@ def _endpoint_categories(endpoints):
         if str(endpoint.get("source", "")).startswith("response-header"):
             categories["header_discovered"].append(endpoint)
 
-    summary = {"endpoint_count": len(endpoints)}
+    summary = {"endpoint_count": len(_unique_endpoint_paths(endpoints))}
     for key in CATEGORY_KEYS:
-        summary[key] = len(categories[key])
+        summary[key] = len(_unique_endpoint_paths(categories[key]))
     return summary, categories
 
 
