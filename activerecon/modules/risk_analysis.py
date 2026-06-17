@@ -49,6 +49,19 @@ def _dns_results(results):
     return dns_results if isinstance(dns_results, dict) else {}
 
 
+def _endpoint_groups(results):
+    endpoint_results = results.get("Endpoint Discovery", [])
+    return endpoint_results if isinstance(endpoint_results, list) else []
+
+
+def _endpoint_items(results):
+    for group in _endpoint_groups(results):
+        base_url = group.get("base_url", "")
+        for endpoint in group.get("endpoints", []):
+            if isinstance(endpoint, dict):
+                yield base_url, endpoint
+
+
 def _is_https_result(item):
     url = str(item.get("final_url") or item.get("url") or "").lower()
     return url.startswith("https://")
@@ -75,8 +88,26 @@ def _header_value_text(value):
     return str(value).strip()
 
 
+def _is_api_like_path(path):
+    lower_path = str(path).lower()
+    return lower_path == "/api" or lower_path == "/rest" or lower_path.startswith("/api/") or lower_path.startswith("/rest/")
+
+
+def _is_admin_debug_docs_path(path):
+    lower_path = str(path).lower()
+    return any(token in lower_path for token in ("/admin", "/debug", "/swagger", "/api-docs"))
+
+
 def generate_attention_findings(results, now=None):
     findings = []
+    seen_endpoint_signals = set()
+
+    def add_endpoint_signal(severity, category, message, evidence):
+        key = (category, message, evidence)
+        if key in seen_endpoint_signals:
+            return
+        seen_endpoint_signals.add(key)
+        findings.append(_finding(severity, category, message, evidence))
 
     for port in _open_ports(results):
         service = str(port.get("service", "")).lower()
@@ -122,6 +153,27 @@ def generate_attention_findings(results, now=None):
 
         if item.get("redirect_chain"):
             findings.append(_finding("info", "http", "HTTP redirects observed", " -> ".join(item["redirect_chain"])))
+
+    for base_url, endpoint in _endpoint_items(results):
+        path = endpoint.get("path", "")
+        source = endpoint.get("source", "")
+        evidence = f"{base_url}{path}" if base_url else path
+
+        if path == "/robots.txt" and endpoint.get("status_code") is not None:
+            add_endpoint_signal("info", "endpoint", "robots.txt found", evidence)
+        if source == "robots.txt":
+            add_endpoint_signal("info", "endpoint", "robots.txt contains Disallow paths", evidence)
+        if source.startswith("response-header"):
+            add_endpoint_signal("info", "endpoint", "Interesting endpoint from response header", evidence)
+        if _is_api_like_path(path):
+            if source.startswith("javascript"):
+                add_endpoint_signal("info", "endpoint", "JavaScript exposes API-like paths", evidence)
+            else:
+                add_endpoint_signal("info", "endpoint", "API-like endpoint discovered", evidence)
+        if _is_admin_debug_docs_path(path):
+            add_endpoint_signal("info", "endpoint", "Possible admin/debug/docs route discovered", evidence)
+        if str(path).lower() == "/ftp":
+            add_endpoint_signal("info", "endpoint", "/ftp endpoint discovered", evidence)
 
     now = now or datetime.now(timezone.utc)
     comparable_now = now.replace(tzinfo=None)
