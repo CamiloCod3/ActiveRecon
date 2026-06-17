@@ -1,7 +1,12 @@
 import ipaddress
 import logging
-from pathlib import PurePosixPath
 from pathlib import Path
+
+from .endpoint_categories import (
+    MARKDOWN_CATEGORY_ORDER,
+    MARKDOWN_CATEGORY_TITLES,
+    categorize_endpoints,
+)
 
 
 def _format_error(error):
@@ -74,59 +79,6 @@ def _write_http_result(f, item):
             f.write(f"  - `{key}`: {value}\n")
 
 
-STATIC_ASSET_EXTENSIONS = {
-    ".css",
-    ".eot",
-    ".gif",
-    ".ico",
-    ".jpeg",
-    ".jpg",
-    ".js",
-    ".map",
-    ".png",
-    ".svg",
-    ".ttf",
-    ".webp",
-    ".woff",
-    ".woff2",
-}
-WELL_KNOWN_REPORT_PATHS = {
-    "/robots.txt",
-    "/sitemap.xml",
-    "/.well-known/security.txt",
-    "/swagger",
-    "/api-docs",
-    "/ftp",
-}
-
-
-def _path_without_query(path):
-    return str(path or "/").split("?", 1)[0].split("#", 1)[0]
-
-
-def _is_api_like_endpoint(path):
-    lower_path = str(path or "").lower()
-    return lower_path == "/api" or lower_path == "/rest" or lower_path.startswith("/api/") or lower_path.startswith("/rest/")
-
-
-def _is_static_asset(path):
-    clean_path = _path_without_query(path).lower()
-    filename = PurePosixPath(clean_path).name
-    return PurePosixPath(clean_path).suffix in STATIC_ASSET_EXTENSIONS or "chunk" in filename
-
-
-def _endpoint_category(endpoint):
-    path = endpoint.get("path", "")
-    lower_path = str(path).lower()
-    if _is_static_asset(path):
-        return "Static Assets"
-    if _is_api_like_endpoint(path):
-        return "API-like Endpoints"
-    if lower_path in WELL_KNOWN_REPORT_PATHS:
-        return "Well-known / Probed Paths"
-    return "Frontend Routes"
-
-
 def _endpoint_line(endpoint):
     line = (
         f"- `{endpoint.get('path', '/')}` "
@@ -182,17 +134,10 @@ def _write_endpoint_discovery(f, endpoint_results):
             f.write("- No endpoints discovered.\n\n")
             continue
 
-        categorized = {
-            "API-like Endpoints": [],
-            "Frontend Routes": [],
-            "Well-known / Probed Paths": [],
-            "Static Assets": [],
-        }
-        for endpoint in endpoints:
-            categorized[_endpoint_category(endpoint)].append(endpoint)
+        categorized = categorize_endpoints(endpoints)
 
-        for title in ("API-like Endpoints", "Frontend Routes", "Well-known / Probed Paths", "Static Assets"):
-            _write_endpoint_category(f, title, categorized[title])
+        for key in MARKDOWN_CATEGORY_ORDER:
+            _write_endpoint_category(f, MARKDOWN_CATEGORY_TITLES[key], categorized[key])
 
     f.write("---\n\n")
 
