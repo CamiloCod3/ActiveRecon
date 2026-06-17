@@ -1,9 +1,48 @@
 import logging
+import re
 
 import requests
 
 
 DEFAULT_HTTP_TIMEOUT = 5
+SECURITY_HEADERS = [
+    "strict-transport-security",
+    "content-security-policy",
+    "x-frame-options",
+    "x-content-type-options",
+]
+
+
+def _response_title(response):
+    content_type = response.headers.get("Content-Type", "")
+    if "html" not in content_type.lower():
+        return None
+
+    match = re.search(r"<title[^>]*>(.*?)</title>", getattr(response, "text", "")[:8192], flags=re.IGNORECASE | re.DOTALL)
+    if not match:
+        return None
+
+    return re.sub(r"\s+", " ", match.group(1)).strip()
+
+
+def _security_headers(headers):
+    normalized = {key.lower(): value for key, value in headers.items()}
+    present = {header: normalized[header] for header in SECURITY_HEADERS if header in normalized}
+    missing = [header for header in SECURITY_HEADERS if header not in normalized]
+    return present, missing
+
+
+def _technology_hints(headers):
+    hints = []
+    server = headers.get("Server") or headers.get("server")
+    powered_by = headers.get("X-Powered-By") or headers.get("x-powered-by")
+
+    if server:
+        hints.append(f"server:{server}")
+    if powered_by:
+        hints.append(f"x-powered-by:{powered_by}")
+
+    return hints
 
 def _get_timeout(config):
     if isinstance(config, dict):
@@ -40,12 +79,20 @@ def analyze_http(target, config, http_ports):
         url = f"{scheme}://{target}:{portid}"
         try:
             response = requests.get(url, timeout=timeout)
+            headers = dict(response.headers)
+            present_headers, missing_headers = _security_headers(headers)
             results.append({
                 "url": url,
+                "final_url": getattr(response, "url", url),
                 "port": portid,
                 "service": service or scheme,
                 "status": response.status_code,
-                "headers": dict(response.headers),
+                "title": _response_title(response),
+                "redirect_chain": [history.url for history in getattr(response, "history", [])],
+                "headers": headers,
+                "security_headers": present_headers,
+                "missing_security_headers": missing_headers,
+                "technology_hints": _technology_hints(headers),
             })
         except requests.RequestException as e:
             results.append({"url": url, "port": portid, "service": service or scheme, "error": str(e)})

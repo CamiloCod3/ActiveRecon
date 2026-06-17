@@ -20,12 +20,28 @@ def test_generate_report_writes_nested_results(tmp_path):
             "status": 200,
             "headers": {"Server": "test"},
         }],
+        "TLS Analysis": [{
+            "host": "example.com",
+            "port": 443,
+            "tls_version": "TLSv1.3",
+            "cipher": "TLS_AES_256_GCM_SHA384",
+            "subject": ["example.com"],
+            "issuer": ["Example CA"],
+            "not_before": "Jan  1 00:00:00 2026 GMT",
+            "not_after": "Jan  1 00:00:00 2027 GMT",
+        }],
         "DNS Analysis": {
             "A": ["192.0.2.10"],
             "MX": [],
             "TXT": [],
             "errors": {"MX": "missing"},
         },
+        "Attention": [{
+            "severity": "low",
+            "category": "http",
+            "message": "Missing Content-Security-Policy header",
+            "evidence": "https://example.com",
+        }],
     }
 
     generate_report("example.com", results, str(output))
@@ -35,6 +51,10 @@ def test_generate_report_writes_nested_results(tmp_path):
     assert "## HTTP Analysis" in content
     assert "http://example.com:80" in content
     assert "## DNS Analysis" in content
+    assert "## TLS Analysis" in content
+    assert "TLSv1.3" in content
+    assert "## Attention Findings" in content
+    assert "Missing Content-Security-Policy header" in content
     assert "192.0.2.10" in content
     assert "Lookup Error" in content
 

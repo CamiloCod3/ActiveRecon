@@ -13,7 +13,9 @@ def generate_report(target, results, output_file):
     logging.info(f"Generating report to: {output_file}")
     nmap_results = results.get("Nmap Scan", results)
     http_results = results.get("HTTP Analysis", [])
+    tls_results = results.get("TLS Analysis", [])
     dns_results = results.get("DNS Analysis", {})
+    attention_results = results.get("Attention", [])
     output_path = Path(output_file)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -64,6 +66,26 @@ def generate_report(target, results, output_file):
             f.write("No HTTP services analyzed.\n")
         f.write("---\n\n")
 
+        f.write("## TLS Analysis\n\n")
+        if isinstance(tls_results, dict) and tls_results.get("error"):
+            f.write(f"**Error:** {tls_results['error']}\n")
+        elif tls_results:
+            for item in tls_results:
+                f.write(f"### {item.get('host', 'Unknown host')}:{item.get('port', '443')}\n\n")
+                if item.get("error"):
+                    f.write(f"- **Error:** {item['error']}\n")
+                else:
+                    f.write(f"- **TLS Version:** {item.get('tls_version', 'N/A')}\n")
+                    f.write(f"- **Cipher:** {item.get('cipher', 'N/A')}\n")
+                    f.write(f"- **Subject:** {', '.join(item.get('subject', [])) or 'N/A'}\n")
+                    f.write(f"- **Issuer:** {', '.join(item.get('issuer', [])) or 'N/A'}\n")
+                    f.write(f"- **Valid From:** {item.get('not_before', 'N/A')}\n")
+                    f.write(f"- **Valid Until:** {item.get('not_after', 'N/A')}\n")
+                f.write("\n")
+        else:
+            f.write("No HTTPS services analyzed.\n")
+        f.write("---\n\n")
+
         f.write("## DNS Analysis\n\n")
         if isinstance(dns_results, dict) and dns_results.get("error"):
             f.write(f"**Error:** {dns_results['error']}\n")
@@ -82,3 +104,17 @@ def generate_report(target, results, output_file):
                 f.write("\n")
         else:
             f.write("No DNS results available.\n")
+        f.write("---\n\n")
+
+        f.write("## Attention Findings\n\n")
+        if attention_results:
+            for item in attention_results:
+                f.write(
+                    f"- **{item.get('severity', 'info').upper()}** "
+                    f"[{item.get('category', 'general')}] {item.get('message', '')}"
+                )
+                if item.get("evidence"):
+                    f.write(f" - `{item['evidence']}`")
+                f.write("\n")
+        else:
+            f.write("No attention findings generated.\n")

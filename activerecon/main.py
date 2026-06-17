@@ -8,7 +8,11 @@ from .modules.nmap_scan import run_nmap_scan
 from .modules.http_enum import analyze_http
 from .modules.dns_analysis import analyze_dns
 from .modules.report_generator import generate_report
+from .modules.json_report import generate_json_report
 from .modules.config_loader import load_config
+from .modules.risk_analysis import generate_attention_findings
+from .modules.scope_guard import is_target_in_scope
+from .modules.tls_analysis import analyze_tls
 
 
 CONFIG = load_config()
@@ -49,6 +53,19 @@ def build_report_path(target, output=None, now=None):
     return str(Path(DEFAULT_REPORT_DIR) / filename)
 
 
+def build_output_paths(target, output=None, output_format="both", now=None):
+    markdown_path = build_report_path(target, output, now)
+    markdown = markdown_path if output_format in {"md", "both"} else None
+
+    if output and output_format == "json":
+        json_path = output
+    else:
+        json_path = str(Path(markdown_path).with_suffix(".json"))
+
+    json_output = json_path if output_format in {"json", "both"} else None
+    return markdown, json_output
+
+
 def main():
     parser = argparse.ArgumentParser(description="Active Recon Tool")
     parser.add_argument("--target", required=True, help="Target IP or domain")
@@ -57,6 +74,14 @@ def main():
         default=None,
         help="Output file for the report. Defaults to reports/<target>_<timestamp>.md",
     )
+    parser.add_argument(
+        "--output-format",
+        choices=("md", "json", "both"),
+        default="both",
+        help="Report output format. Defaults to both Markdown and JSON.",
+    )
+    parser.add_argument("--scope", help="Optional scope file with allowed domains, IPs, or CIDRs")
+    parser.add_argument("--dry-run", action="store_true", help="Validate options and show planned outputs without scanning")
 
     scan_profile_choices = list(CONFIG["scan_profiles"].keys())
     parser.add_argument(
@@ -72,11 +97,27 @@ def main():
     scan_command = CONFIG["scan_profiles"][chosen_profile]
 
     target = args.target
-    output_file = build_report_path(target, args.output)
+    markdown_output, json_output = build_output_paths(target, args.output, args.output_format)
     results = {}
+
+    if args.scope:
+        try:
+            in_scope = is_target_in_scope(target, args.scope)
+        except OSError as e:
+            parser.error(f"Could not read scope file {args.scope}: {e}")
+        if not in_scope:
+            parser.error(f"Target is outside the allowed scope file: {args.scope}")
 
     logging.info(f"Starting automated recon on target: {target}")
     logging.info(f"Using scan profile: {chosen_profile} ({scan_command})")
+    if markdown_output:
+        logging.info(f"Markdown report path: {markdown_output}")
+    if json_output:
+        logging.info(f"JSON report path: {json_output}")
+
+    if args.dry_run:
+        logging.info("Dry run requested. No Nmap, HTTP, TLS, or DNS checks were executed.")
+        return
 
     try:
         nmap_results = run_nmap_scan(target, scan_command)
@@ -105,17 +146,36 @@ def main():
         results["HTTP Analysis"] = []
 
     try:
+        logging.info("Running TLS analysis.")
+        results["TLS Analysis"] = analyze_tls(results["HTTP Analysis"], CONFIG.get("http_timeout", 5))
+    except Exception as e:
+        logging.error(f"Error during TLS analysis: {e}")
+        results["TLS Analysis"] = {"error": f"TLS analysis failed: {e}"}
+
+    try:
         logging.info("Running DNS analysis.")
         results["DNS Analysis"] = analyze_dns(target)
     except Exception as e:
         logging.error(f"Error during DNS analysis: {e}")
         results["DNS Analysis"] = {"error": f"DNS analysis failed: {e}"}
 
-    try:
-        generate_report(target, results, output_file)
-        logging.info(f"Recon completed successfully! Report saved to {output_file}")
-    except Exception as e:
-        logging.error(f"Error during report generation: {e}")
+    results["Attention"] = generate_attention_findings(results)
+
+    if markdown_output:
+        try:
+            generate_report(target, results, markdown_output)
+            logging.info(f"Markdown report saved to {markdown_output}")
+        except Exception as e:
+            logging.error(f"Error during Markdown report generation: {e}")
+
+    if json_output:
+        try:
+            generate_json_report(target, results, json_output)
+            logging.info(f"JSON report saved to {json_output}")
+        except Exception as e:
+            logging.error(f"Error during JSON report generation: {e}")
+
+    logging.info("Recon completed.")
 
 
 if __name__ == "__main__":
