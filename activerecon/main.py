@@ -1,4 +1,5 @@
 import argparse
+import ipaddress
 import logging
 import re
 from datetime import datetime
@@ -21,6 +22,8 @@ LOG_FORMAT = "%(asctime)s - %(levelname)s - %(message)s"
 
 
 DEFAULT_REPORT_DIR = "reports"
+COMMON_HTTP_PORTS = {"80", "443", "3000", "5000", "8000", "8080", "8443", "9000", "9443"}
+DNS_IP_SKIP_REASON = "DNS analysis skipped for IP address target"
 
 
 def configure_logging(verbose=False, quiet=False):
@@ -52,12 +55,30 @@ def _is_http_service(port):
     if state and state != "open":
         return False
 
-    return "http" in service or portid in {"80", "443", "8080", "8443"}
+    return "http" in service or portid in COMMON_HTTP_PORTS
 
 
 def _get_http_ports(nmap_results):
     ports = nmap_results.get("ports", []) if isinstance(nmap_results, dict) else []
     return [port for port in ports if _is_http_service(port)]
+
+
+def _is_ip_target(target):
+    try:
+        ipaddress.ip_address(target)
+        return True
+    except ValueError:
+        return False
+
+
+def _dns_skip_result():
+    return {
+        "skipped": True,
+        "reason": DNS_IP_SKIP_REASON,
+        "A": [],
+        "MX": [],
+        "TXT": [],
+    }
 
 
 def _safe_report_name(target):
@@ -198,12 +219,16 @@ def main():
         logging.error(f"Error during TLS analysis: {e}")
         results["TLS Analysis"] = {"error": f"TLS analysis failed: {e}"}
 
-    try:
-        logging.info("Running DNS analysis.")
-        results["DNS Analysis"] = analyze_dns(target)
-    except Exception as e:
-        logging.error(f"Error during DNS analysis: {e}")
-        results["DNS Analysis"] = {"error": f"DNS analysis failed: {e}"}
+    if _is_ip_target(target):
+        logging.info(DNS_IP_SKIP_REASON)
+        results["DNS Analysis"] = _dns_skip_result()
+    else:
+        try:
+            logging.info("Running DNS analysis.")
+            results["DNS Analysis"] = analyze_dns(target)
+        except Exception as e:
+            logging.error(f"Error during DNS analysis: {e}")
+            results["DNS Analysis"] = {"error": f"DNS analysis failed: {e}"}
 
     results["Attention"] = generate_attention_findings(results)
 
