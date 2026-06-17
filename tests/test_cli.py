@@ -1,7 +1,10 @@
+import json
+
 import pytest
 
 from activerecon import cli
 from activerecon.models import ReconOptions, ReconResult, TargetSpec
+from activerecon.targets.target_inventory import build_inventory, save_inventory
 
 
 def _sample_result():
@@ -141,3 +144,95 @@ def test_cli_verbose_enables_detailed_logging(monkeypatch):
 
     assert cli.main(["--target", "127.0.0.1", "--verbose"]) == 0
     assert captured == {"verbose": True, "quiet": False}
+
+
+def test_cli_dry_run_still_passes_scan_option(monkeypatch):
+    captured = {}
+
+    def fake_run_recon(options):
+        captured["options"] = options
+        result = _sample_result()
+        result.dry_run = True
+        result.results = {}
+        return result
+
+    monkeypatch.setattr(cli, "run_recon", fake_run_recon)
+
+    assert cli.main(["--target", "example.com", "--dry-run"]) == 0
+    assert captured["options"].dry_run is True
+
+
+def test_cli_targets_import_does_not_scan(monkeypatch, tmp_path, capsys):
+    input_file = tmp_path / "targets.txt"
+    output_file = tmp_path / "inventories" / "latest.json"
+    input_file.write_text("example.com\nexample.com\nhttps://api.example.com\n", encoding="utf-8")
+    monkeypatch.setattr(cli, "run_recon", lambda options: (_ for _ in ()).throw(AssertionError()))
+
+    result = cli.main([
+        "targets",
+        "import",
+        "--input",
+        str(input_file),
+        "--output",
+        str(output_file),
+    ])
+    captured_output = capsys.readouterr()
+
+    assert result == 0
+    assert output_file.exists()
+    assert "ActiveRecon target import completed" in captured_output.out
+    assert "Targets loaded: 3" in captured_output.out
+    assert "Unique targets: 2" in captured_output.out
+    assert "Duplicates removed: 1" in captured_output.out
+    assert "Scans run: 0" in captured_output.out
+
+    inventory = json.loads(output_file.read_text(encoding="utf-8"))
+    assert [item["host"] for item in inventory["targets"]] == ["example.com", "api.example.com"]
+
+
+def test_cli_targets_diff_does_not_scan(monkeypatch, tmp_path, capsys):
+    previous = tmp_path / "old.json"
+    current = tmp_path / "latest.json"
+    save_inventory(build_inventory(["example.com", "old.example.com"]), previous)
+    save_inventory(build_inventory(["example.com", "new.example.com"]), current)
+    monkeypatch.setattr(cli, "run_recon", lambda options: (_ for _ in ()).throw(AssertionError()))
+
+    result = cli.main([
+        "targets",
+        "diff",
+        "--previous",
+        str(previous),
+        "--current",
+        str(current),
+    ])
+    captured_output = capsys.readouterr()
+
+    assert result == 0
+    assert "ActiveRecon target diff completed" in captured_output.out
+    assert "Added: 1" in captured_output.out
+    assert "Removed: 1" in captured_output.out
+    assert "Unchanged: 1" in captured_output.out
+    assert "Scans run: 0" in captured_output.out
+
+
+def test_cli_targets_export_scope_does_not_scan(monkeypatch, tmp_path, capsys):
+    inventory_file = tmp_path / "latest.json"
+    scope_file = tmp_path / "scopes" / "latest.txt"
+    save_inventory(build_inventory(["https://api.example.com", "https://api.example.com/login"]), inventory_file)
+    monkeypatch.setattr(cli, "run_recon", lambda options: (_ for _ in ()).throw(AssertionError()))
+
+    result = cli.main([
+        "targets",
+        "export-scope",
+        "--inventory",
+        str(inventory_file),
+        "--output",
+        str(scope_file),
+    ])
+    captured_output = capsys.readouterr()
+
+    assert result == 0
+    assert scope_file.read_text(encoding="utf-8").splitlines() == ["api.example.com"]
+    assert "ActiveRecon scope export completed" in captured_output.out
+    assert "Targets exported: 1" in captured_output.out
+    assert "Scans run: 0" in captured_output.out

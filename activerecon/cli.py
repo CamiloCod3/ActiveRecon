@@ -1,4 +1,5 @@
 import argparse
+import json
 import logging
 
 from .models import ReconOptions
@@ -6,6 +7,14 @@ from .modules.doctor import run_doctor
 from .modules.json_report import build_json_summary
 from .output_paths import DEFAULT_REPORT_DIR
 from .runner import ReconValidationError, run_recon
+from .targets.target_diff import diff_inventories
+from .targets.target_inventory import (
+    build_inventory,
+    export_scope_file,
+    load_inventory,
+    save_inventory,
+)
+from .targets.target_loader import load_targets
 
 
 LOG_FORMAT = "%(asctime)s - %(levelname)s - %(message)s"
@@ -61,6 +70,22 @@ def build_parser():
         default="fast",
         help="Choose a pre-defined Nmap profile from config.yaml",
     )
+
+    subparsers = parser.add_subparsers(dest="command")
+    targets_parser = subparsers.add_parser("targets", help="Import, diff, and export target inventories")
+    targets_subparsers = targets_parser.add_subparsers(dest="targets_action")
+
+    import_parser = targets_subparsers.add_parser("import", help="Import targets into an inventory file")
+    import_parser.add_argument("--input", required=True, help="Input targets file (.txt, .json, or .jsonl)")
+    import_parser.add_argument("--output", required=True, help="Output inventory JSON file")
+
+    diff_parser = targets_subparsers.add_parser("diff", help="Compare two inventory files")
+    diff_parser.add_argument("--previous", required=True, help="Previous inventory JSON file")
+    diff_parser.add_argument("--current", required=True, help="Current inventory JSON file")
+
+    export_parser = targets_subparsers.add_parser("export-scope", help="Export inventory hosts to a scope file")
+    export_parser.add_argument("--inventory", required=True, help="Input inventory JSON file")
+    export_parser.add_argument("--output", required=True, help="Output scope text file")
     return parser
 
 
@@ -103,6 +128,14 @@ def _report_paths(result):
     return paths
 
 
+def _inventory_host_count(inventory):
+    return len({
+        item.get("host")
+        for item in inventory.get("targets", [])
+        if item.get("host")
+    })
+
+
 def print_report_paths(result, output=print):
     paths = _report_paths(result)
     if not paths:
@@ -141,6 +174,44 @@ def print_scan_summary(result, output=print):
             output(f"- {label}: {path}")
 
 
+def run_targets_command(args, output=print):
+    if args.targets_action == "import":
+        raw_targets = load_targets(args.input)
+        inventory = build_inventory(raw_targets, source=args.input)
+        save_inventory(inventory, args.output)
+        output("ActiveRecon target import completed")
+        output(f"Input: {args.input}")
+        output(f"Output: {args.output}")
+        output(f"Targets loaded: {len(raw_targets)}")
+        output(f"Unique targets: {len(inventory['targets'])}")
+        output(f"Duplicates removed: {len(raw_targets) - len(inventory['targets'])}")
+        output("Scans run: 0")
+        return 0
+
+    if args.targets_action == "diff":
+        previous = load_inventory(args.previous)
+        current = load_inventory(args.current)
+        diff = diff_inventories(previous, current)
+        output("ActiveRecon target diff completed")
+        output(f"Added: {len(diff['added'])}")
+        output(f"Removed: {len(diff['removed'])}")
+        output(f"Unchanged: {len(diff['unchanged'])}")
+        output("Scans run: 0")
+        return 0
+
+    if args.targets_action == "export-scope":
+        inventory = load_inventory(args.inventory)
+        export_scope_file(inventory, args.output)
+        output("ActiveRecon scope export completed")
+        output(f"Inventory: {args.inventory}")
+        output(f"Output: {args.output}")
+        output(f"Targets exported: {_inventory_host_count(inventory)}")
+        output("Scans run: 0")
+        return 0
+
+    raise ValueError("targets requires a subcommand: import, diff, or export-scope")
+
+
 def main(argv=None):
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -152,6 +223,13 @@ def main(argv=None):
     if args.doctor:
         run_doctor(DEFAULT_REPORT_DIR)
         return 0
+
+    if args.command == "targets":
+        try:
+            return run_targets_command(args)
+        except (OSError, ValueError, json.JSONDecodeError) as e:
+            parser.error(str(e))
+            return 2
 
     if not args.target:
         parser.error("--target is required unless --doctor is used")

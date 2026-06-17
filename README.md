@@ -57,6 +57,7 @@ Instead of manually running separate commands and collecting notes from differen
 * collect TLS certificate metadata for HTTPS services
 * query A, MX, and TXT DNS records, while skipping noisy DNS lookups for IP address targets
 * run endpoint discovery automatically from the `web` scan profile
+* import, normalize, deduplicate, diff, and export target inventories without scanning
 * generate timestamped Markdown and JSON reports under `reports/`
 * highlight interesting signals for follow-up review
 
@@ -77,6 +78,7 @@ ActiveRecon currently supports:
 | TLS       | TLS version, cipher, subject, issuer, and certificate validity dates         |
 | DNS       | Separate A, MX, and TXT lookups, with clean IP-target skip behavior          |
 | Web       | Endpoint discovery from HTML, headers, JavaScript, robots.txt, and probes    |
+| Inventory | Target import, normalization, deduplication, diff, and scope export           |
 | Reporting | Timestamped Markdown and JSON schema `1.1` reports                           |
 | Safety    | Responsible-use notice, scope guard, dry-run mode, doctor checks             |
 | Analysis  | Low-noise interesting signals for follow-up review                           |
@@ -147,6 +149,24 @@ Use a scope file:
 
 ```bash
 activerecon --target app.example.com --scope scope.txt --scan-profile standard
+```
+
+Import target inventory without scanning:
+
+```bash
+activerecon targets import --input targets.txt --output inventories/latest.json
+```
+
+Compare two inventories without scanning:
+
+```bash
+activerecon targets diff --previous inventories/old.json --current inventories/latest.json
+```
+
+Export normalized inventory hosts to a scope file:
+
+```bash
+activerecon targets export-scope --inventory inventories/latest.json --output scopes/latest.txt
 ```
 
 ---
@@ -241,6 +261,9 @@ pip install -e .
 ```bash
 activerecon --target <IP_OR_DOMAIN> --scan-profile <PROFILE> [--output <OUTPUT_FILE>] [--output-format md|json|both] [--verbose|--quiet]
 activerecon --doctor
+activerecon targets import --input <TARGETS_FILE> --output <INVENTORY_JSON>
+activerecon targets diff --previous <OLD_JSON> --current <NEW_JSON>
+activerecon targets export-scope --inventory <INVENTORY_JSON> --output <SCOPE_FILE>
 ```
 
 ### Arguments
@@ -256,6 +279,39 @@ activerecon --doctor
 | `--dry-run`       | Validate arguments and planned outputs without scanning                                |
 | `--verbose`       | Show detailed internal logs                                                            |
 | `--quiet`         | Suppress the normal summary and show only errors plus report paths                     |
+
+---
+
+## Target Inventory
+
+Inventory commands are intentionally separate from scanning. They do not run Nmap, HTTP checks, DNS lookups, endpoint discovery, or reports.
+
+Supported import formats:
+
+| Format  | Behavior                                                     |
+| ------- | ------------------------------------------------------------ |
+| `.txt`  | One target per line. Blank lines and `#` comments are ignored |
+| `.json` | List of strings, list of objects, or inventory-like object    |
+| `.jsonl` | One string or object per line                                |
+
+For JSON objects, ActiveRecon reads the first useful field from:
+
+```text
+target, url, host, domain, uri
+```
+
+Inventory files use schema version `1.0`:
+
+```json
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-06-17T18:05:44Z",
+  "source": "targets.txt",
+  "targets": []
+}
+```
+
+Scope export writes one normalized host per line, compatible with the current `--scope` file behavior.
 
 ---
 
@@ -420,6 +476,11 @@ ActiveRecon/
 |       |-- risk_analysis.py
 |       |-- scope_guard.py
 |       `-- tls_analysis.py
+|   |-- targets/
+|   |   |-- parser.py
+|   |   |-- target_diff.py
+|   |   |-- target_inventory.py
+|   |   `-- target_loader.py
 |-- reports/
 |-- tests/
 |-- .github/workflows/
