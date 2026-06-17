@@ -161,10 +161,24 @@ activerecon --target example.com --scan-profile fast --dry-run
 | --- | --- |
 | `--target` | Target IP address or domain name |
 | `--scan-profile` | Nmap scan profile to use |
-| `--output` | Optional report output file. Defaults to `reports/<target>_<timestamp>.md` |
+| `--output` | Optional report name or path. Bare names are saved as `reports/<name>_<timestamp>.<ext>` |
 | `--output-format` | `md`, `json`, or `both`. Defaults to `both` |
 | `--scope` | Optional file with allowed domains, IPs, or CIDR ranges |
 | `--dry-run` | Validate arguments and planned outputs without scanning |
+
+When `--output` is omitted, the target name is used:
+
+```text
+reports/example.com_20260617_090807.md
+reports/example.com_20260617_090807.json
+```
+
+When `--output report.md` is provided, `report` becomes the report basename and the files still land in `reports/` with a timestamp:
+
+```text
+reports/report_20260617_090807.md
+reports/report_20260617_090807.json
+```
 
 ### Available Scan Profiles
 
