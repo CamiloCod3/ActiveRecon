@@ -316,6 +316,12 @@ The JSON report uses a simple stable wrapper:
   "schema_version": "1.0",
   "generated_at": "2026-06-17T09:08:07Z",
   "target": "example.com",
+  "metadata": {
+    "tool": "ActiveRecon",
+    "scan_profile": "web",
+    "authorized_use_notice": true
+  },
+  "summary": {},
   "results": {}
 }
 ```
@@ -328,11 +334,12 @@ HTTP Analysis
 TLS Analysis
 DNS Analysis
 Attention
+Interesting Signals
 ```
 
-Markdown reports use the heading `Interesting Signals`. JSON output keeps the `Attention` key for compatibility.
+Markdown reports use the heading `Interesting Signals`. JSON output keeps the `Attention` key for compatibility and also includes `Interesting Signals` as an alias.
 
-When the `web` profile is used, reports also include `Endpoint Discovery`.
+When the `web` profile is used, reports also include `Endpoint Discovery` with the original endpoint list plus summary counts and categorized endpoint groups.
 
 ---
 

@@ -67,8 +67,9 @@ def test_main_smoke_with_mocked_modules(monkeypatch, tmp_path):
         captured["results"] = results
         captured["output_file"] = output_file
 
-    def fake_json_report(target, results, output_file):
+    def fake_json_report(target, results, output_file, **kwargs):
         captured["json_output_file"] = output_file
+        captured["json_kwargs"] = kwargs
 
     monkeypatch.setattr(main_module, "CONFIG", {"scan_profiles": {"fast": "-Pn"}, "http_timeout": 5})
     monkeypatch.setattr(main_module, "run_nmap_scan", fake_nmap)
@@ -93,8 +94,10 @@ def test_main_smoke_with_mocked_modules(monkeypatch, tmp_path):
 
     assert captured["http_ports"] == [{"portid": "80", "protocol": "tcp", "state": "open", "service": "http"}]
     assert captured["results"]["Nmap Scan"]["status"]["state"] == "up"
+    assert captured["results"]["Interesting Signals"] == captured["results"]["Attention"]
     assert captured["output_file"] == str(tmp_path / "report_20260617_090807.md")
     assert captured["json_output_file"] == str(tmp_path / "report_20260617_090807.json")
+    assert captured["json_kwargs"]["scan_profile"] == "fast"
 
 
 def test_main_handles_failed_nmap_without_http(monkeypatch, tmp_path):
@@ -107,7 +110,7 @@ def test_main_handles_failed_nmap_without_http(monkeypatch, tmp_path):
     def fake_report(target, results, output_file):
         captured["results"] = results
 
-    def fake_json_report(target, results, output_file):
+    def fake_json_report(target, results, output_file, **kwargs):
         captured["json_output_file"] = output_file
 
     monkeypatch.setattr(main_module, "CONFIG", {"scan_profiles": {"fast": "-Pn"}, "http_timeout": 5})
@@ -181,7 +184,7 @@ def test_main_uses_timestamped_default_output(monkeypatch):
     def fake_report(target, results, output_file):
         captured["output_file"] = output_file
 
-    def fake_json_report(target, results, output_file):
+    def fake_json_report(target, results, output_file, **kwargs):
         captured["json_output_file"] = output_file
 
     monkeypatch.setattr(main_module, "CONFIG", {"scan_profiles": {"fast": "-Pn"}, "http_timeout": 5})
@@ -267,7 +270,7 @@ def test_main_skips_dns_for_ip_target(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(main_module, "generate_attention_findings", lambda results: [])
     monkeypatch.setattr(main_module, "generate_report", fake_report)
-    monkeypatch.setattr(main_module, "generate_json_report", lambda target, results, output_file: None)
+    monkeypatch.setattr(main_module, "generate_json_report", lambda target, results, output_file, **kwargs: None)
     monkeypatch.setattr(
         sys,
         "argv",
@@ -326,7 +329,7 @@ def test_main_web_profile_runs_endpoint_discovery(monkeypatch, tmp_path):
     monkeypatch.setattr(main_module, "analyze_dns", lambda target: {"A": [], "MX": [], "TXT": []})
     monkeypatch.setattr(main_module, "generate_attention_findings", lambda results: [])
     monkeypatch.setattr(main_module, "generate_report", fake_report)
-    monkeypatch.setattr(main_module, "generate_json_report", lambda target, results, output_file: None)
+    monkeypatch.setattr(main_module, "generate_json_report", lambda target, results, output_file, **kwargs: None)
     monkeypatch.setattr(
         sys,
         "argv",

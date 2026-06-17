@@ -245,7 +245,9 @@ def main():
             logging.error(f"Error during DNS analysis: {e}")
             results["DNS Analysis"] = {"error": f"DNS analysis failed: {e}"}
 
-    results["Attention"] = generate_attention_findings(results)
+    interesting_signals = generate_attention_findings(results)
+    results["Attention"] = interesting_signals
+    results["Interesting Signals"] = interesting_signals
 
     if markdown_output:
         try:
@@ -256,7 +258,7 @@ def main():
 
     if json_output:
         try:
-            generate_json_report(target, results, json_output)
+            generate_json_report(target, results, json_output, scan_profile=chosen_profile)
             logging.info(f"JSON report saved to {json_output}")
         except Exception as e:
             logging.error(f"Error during JSON report generation: {e}")
