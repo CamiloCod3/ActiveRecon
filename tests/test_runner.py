@@ -1,5 +1,6 @@
 from activerecon import runner
 from activerecon.models import ReconOptions
+from activerecon.runner import ReconValidationError
 
 
 def _fixed_output_paths(target, output, output_format):
@@ -99,6 +100,40 @@ def test_runner_dry_run_skips_scanning(monkeypatch):
 
     assert result.dry_run
     assert result.results == {}
+
+
+def test_runner_blocks_out_of_scope_target_with_useful_reason(monkeypatch, tmp_path):
+    scope_file = tmp_path / "scope.json"
+    scope_file.write_text(
+        """
+        {
+          "schema_version": "1.0",
+          "program": "Example Program",
+          "allowed": {"wildcards": ["*.example.com"]},
+          "denied": {"domains": ["admin.example.com"]},
+          "rules": {}
+        }
+        """,
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(runner, "CONFIG", {"scan_profiles": {"fast": "-Pn"}, "http_timeout": 5})
+    monkeypatch.setattr(runner, "build_output_paths", _fixed_output_paths)
+    monkeypatch.setattr(
+        runner,
+        "run_nmap_scan",
+        lambda target, scan_command, config: (_ for _ in ()).throw(AssertionError("No scan expected")),
+    )
+
+    try:
+        runner.run_recon(ReconOptions(target="admin.example.com", scan_profile="fast", scope=str(scope_file)))
+    except ReconValidationError as e:
+        message = str(e)
+    else:
+        raise AssertionError("Expected out-of-scope target to be blocked")
+
+    assert "Target is outside the allowed scope file" in message
+    assert "denied.domains" in message
+    assert "admin.example.com" in message
 
 
 def test_runner_skips_dns_for_ip_target(monkeypatch):
