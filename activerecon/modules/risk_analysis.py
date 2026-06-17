@@ -47,6 +47,11 @@ def _dns_results(results):
     return dns_results if isinstance(dns_results, dict) else {}
 
 
+def _is_https_result(item):
+    url = str(item.get("final_url") or item.get("url") or "").lower()
+    return url.startswith("https://")
+
+
 def generate_attention_findings(results, now=None):
     findings = []
 
@@ -63,6 +68,8 @@ def generate_attention_findings(results, now=None):
             findings.append(_finding("low", "http", "HTTP analysis failed for a detected service", item.get("url", "")))
             continue
         for header_name, message in SECURITY_HEADERS.items():
+            if header_name == "strict-transport-security" and not _is_https_result(item):
+                continue
             if header_name in item.get("missing_security_headers", []):
                 findings.append(_finding("low", "http", message, item.get("url", "")))
         if item.get("redirect_chain"):

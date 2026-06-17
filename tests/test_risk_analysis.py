@@ -49,6 +49,39 @@ def test_generate_attention_findings_only_reports_open_http_ports():
     assert "Sensitive remote access service exposed on port 23" not in messages
 
 
+def test_generate_attention_findings_reports_hsts_only_for_https():
+    results = {
+        "HTTP Analysis": [
+            {
+                "url": "http://example.com",
+                "missing_security_headers": [
+                    "strict-transport-security",
+                    "content-security-policy",
+                    "x-frame-options",
+                    "x-content-type-options",
+                ],
+            },
+            {
+                "url": "https://secure.example.com",
+                "missing_security_headers": [
+                    "strict-transport-security",
+                    "content-security-policy",
+                    "x-frame-options",
+                    "x-content-type-options",
+                ],
+            },
+        ],
+    }
+
+    findings = generate_attention_findings(results)
+    messages = [item["message"] for item in findings]
+
+    assert messages.count("Missing HSTS header") == 1
+    assert messages.count("Missing Content-Security-Policy header") == 2
+    assert messages.count("Missing X-Frame-Options header") == 2
+    assert messages.count("Missing X-Content-Type-Options header") == 2
+
+
 def test_generate_attention_findings_reports_expired_tls_certificates():
     results = {
         "TLS Analysis": [{

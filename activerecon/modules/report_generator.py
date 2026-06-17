@@ -10,6 +10,32 @@ def _as_list(value):
     return value if isinstance(value, list) else []
 
 
+def _write_markdown_list(f, label, values):
+    if not values:
+        return
+    f.write(f"- **{label}:**\n")
+    for value in values:
+        f.write(f"  - `{value}`\n")
+
+
+def _write_http_result(f, item):
+    f.write(f"- **Status:** {item.get('status', 'N/A')}\n")
+    if item.get("title"):
+        f.write(f"- **Title:** {item['title']}\n")
+    if item.get("final_url"):
+        f.write(f"- **Final URL:** {item['final_url']}\n")
+
+    _write_markdown_list(f, "Redirect Chain", item.get("redirect_chain", []))
+    _write_markdown_list(f, "Missing Security Headers", item.get("missing_security_headers", []))
+    _write_markdown_list(f, "Technology Hints", item.get("technology_hints", []))
+
+    headers = item.get("headers", {})
+    if headers:
+        f.write("- **Response Headers:**\n")
+        for key, value in sorted(headers.items()):
+            f.write(f"  - `{key}`: {value}\n")
+
+
 def build_report_summary(results):
     nmap_results = results.get("Nmap Scan", results)
     ports = _as_list(nmap_results.get("ports", []))
@@ -97,12 +123,7 @@ def generate_report(target, results, output_file):
                 if item.get("error"):
                     f.write(f"- **Error:** {item['error']}\n")
                 else:
-                    f.write(f"- **Status:** {item.get('status', 'N/A')}\n")
-                    headers = item.get("headers", {})
-                    if headers:
-                        f.write("- **Headers:**\n")
-                        for key, value in sorted(headers.items()):
-                            f.write(f"  - `{key}`: {value}\n")
+                    _write_http_result(f, item)
                 f.write("\n")
         else:
             f.write("No HTTP services analyzed.\n")
