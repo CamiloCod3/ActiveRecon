@@ -6,6 +6,37 @@ def _format_error(error):
     return f"\n**Error:** {error}\n" if error else ""
 
 
+def _as_list(value):
+    return value if isinstance(value, list) else []
+
+
+def build_report_summary(results):
+    nmap_results = results.get("Nmap Scan", results)
+    ports = _as_list(nmap_results.get("ports", []))
+    http_results = _as_list(results.get("HTTP Analysis", []))
+    tls_results = _as_list(results.get("TLS Analysis", []))
+    dns_results = results.get("DNS Analysis", {})
+    attention_results = _as_list(results.get("Attention", []))
+
+    dns_record_count = 0
+    if isinstance(dns_results, dict):
+        dns_record_count = sum(
+            len(records)
+            for record_type, records in dns_results.items()
+            if record_type != "errors" and isinstance(records, list)
+        )
+
+    return {
+        "host_status": nmap_results.get("status", {}).get("state", "Unknown"),
+        "total_ports": len(ports),
+        "open_ports": len([port for port in ports if port.get("state") == "open"]),
+        "http_services": len(http_results),
+        "tls_results": len(tls_results),
+        "dns_records": dns_record_count,
+        "interesting_signals": len(attention_results),
+    }
+
+
 def generate_report(target, results, output_file):
     """
     Generates a well-formatted Markdown report from the scan results.
@@ -23,6 +54,17 @@ def generate_report(target, results, output_file):
         f.write("# Active Recon Report\n\n")
         f.write(f"**Target:** {target}\n")
         f.write(f"**Host Status:** {nmap_results.get('status', {}).get('state', 'Unknown')}\n")
+        f.write("---\n\n")
+
+        summary = build_report_summary(results)
+        f.write("## Summary\n\n")
+        f.write(f"- **Host Status:** {summary['host_status']}\n")
+        f.write(f"- **Total Ports Listed:** {summary['total_ports']}\n")
+        f.write(f"- **Open Ports:** {summary['open_ports']}\n")
+        f.write(f"- **HTTP Services:** {summary['http_services']}\n")
+        f.write(f"- **TLS Results:** {summary['tls_results']}\n")
+        f.write(f"- **DNS Records:** {summary['dns_records']}\n")
+        f.write(f"- **Interesting Signals:** {summary['interesting_signals']}\n")
         f.write("---\n\n")
 
         f.write("## Scan Information\n\n")
@@ -106,7 +148,7 @@ def generate_report(target, results, output_file):
             f.write("No DNS results available.\n")
         f.write("---\n\n")
 
-        f.write("## Attention Findings\n\n")
+        f.write("## Interesting Signals\n\n")
         if attention_results:
             for item in attention_results:
                 f.write(
@@ -117,4 +159,4 @@ def generate_report(target, results, output_file):
                     f.write(f" - `{item['evidence']}`")
                 f.write("\n")
         else:
-            f.write("No attention findings generated.\n")
+            f.write("No interesting signals generated.\n")

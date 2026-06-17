@@ -15,13 +15,14 @@ ActiveRecon helps organize common reconnaissance tasks into a repeatable command
 Instead of manually running separate commands and collecting notes from different tools, ActiveRecon can:
 
 * run predefined Nmap scan profiles
+* check local setup with a no-scan doctor command
 * identify open services
 * detect HTTP services from scan results
 * collect HTTP status, headers, redirects, page titles, and simple technology hints
 * collect TLS certificate metadata for HTTPS services
 * query common DNS records
 * generate Markdown and JSON reports
-* highlight attention findings for follow-up review
+* highlight interesting signals for follow-up review
 
 This project is intended for learning, lab use, and authorized testing.
 
@@ -32,6 +33,14 @@ This project is intended for learning, lab use, and authorized testing.
 ### Nmap Scanning
 
 Run predefined Nmap scan profiles from `activerecon/modules/config/config.yaml`.
+
+ActiveRecon resolves the Nmap executable by checking:
+
+* an optional `nmap_executable` or `nmap_path` config value
+* `nmap` in `PATH`
+* common Windows install paths
+
+Nmap scans also use the `nmap_timeout` config value, which defaults to `300` seconds.
 
 Current scan profiles:
 
@@ -75,6 +84,7 @@ For HTTPS services, ActiveRecon collects:
 
 Reports include:
 
+* summary counts
 * target information
 * host status
 * scan information
@@ -82,10 +92,12 @@ Reports include:
 * HTTP results
 * TLS results
 * DNS results
-* attention findings
+* interesting signals
 * error details where applicable
 
 By default, ActiveRecon writes both Markdown and JSON reports.
+
+Markdown reports use the heading `Interesting Signals`. JSON output keeps the `Attention` key for compatibility.
 
 ---
 
@@ -93,9 +105,10 @@ By default, ActiveRecon writes both Markdown and JSON reports.
 
 ```bash
 activerecon --target example.com --scan-profile fast
+activerecon --doctor
 ```
 
-This command will:
+The recon command will:
 
 1. Run the selected Nmap scan profile against the target.
 2. Parse the Nmap XML output.
@@ -143,7 +156,8 @@ pip install .
 ## Usage
 
 ```bash
-activerecon --target <IP_OR_DOMAIN> --scan-profile <PROFILE> [--output <OUTPUT_FILE>] [--output-format md|json|both]
+activerecon --target <IP_OR_DOMAIN> --scan-profile <PROFILE> [--output <OUTPUT_FILE>] [--output-format md|json|both] [--verbose|--quiet]
+activerecon --doctor
 ```
 
 ### Examples
@@ -153,6 +167,8 @@ activerecon --target example.com --scan-profile fast
 activerecon --target example.com --scan-profile fast --output-format json --output reports/example.json
 activerecon --target app.example.com --scope scope.txt --scan-profile standard
 activerecon --target example.com --scan-profile fast --dry-run
+activerecon --target example.com --scan-profile fast --verbose
+activerecon --doctor
 ```
 
 ### Arguments
@@ -160,11 +176,14 @@ activerecon --target example.com --scan-profile fast --dry-run
 | Argument | Description |
 | --- | --- |
 | `--target` | Target IP address or domain name |
+| `--doctor` | Check Python, Nmap, config loading, and report directory write access without scanning |
 | `--scan-profile` | Nmap scan profile to use |
 | `--output` | Optional report name or path. Bare names are saved as `reports/<name>_<timestamp>.<ext>` |
 | `--output-format` | `md`, `json`, or `both`. Defaults to `both` |
 | `--scope` | Optional file with allowed domains, IPs, or CIDR ranges |
 | `--dry-run` | Validate arguments and planned outputs without scanning |
+| `--verbose` | Show debug logging |
+| `--quiet` | Show only warnings and errors |
 
 When `--output` is omitted, the target name is used:
 
@@ -188,6 +207,17 @@ reports/report_20260617_090807.json
 | `standard` | More detailed TCP scan with service and default script detection |
 | `full` | Full TCP port scan with service and default script detection |
 | `udp` | UDP scan using top UDP ports and script timeout |
+
+### Config Values
+
+Common config values live in `activerecon/modules/config/config.yaml`:
+
+```yaml
+http_timeout: 5
+nmap_timeout: 300
+# Optional override if Nmap is installed outside PATH.
+# nmap_executable: "C:\\Program Files\\Nmap\\nmap.exe"
+```
 
 ### Scope Guard
 
@@ -232,6 +262,7 @@ ActiveRecon/
 |       |   `-- config.yaml
 |       |-- config_loader.py
 |       |-- dns_analysis.py
+|       |-- doctor.py
 |       |-- http_enum.py
 |       |-- json_report.py
 |       |-- nmap_scan.py
@@ -256,12 +287,13 @@ Generated Markdown reports include sections such as:
 ```markdown
 # Active Recon Report
 
+## Summary
 ## Scan Information
 ## Open Ports
 ## HTTP Analysis
 ## TLS Analysis
 ## DNS Analysis
-## Attention Findings
+## Interesting Signals
 ```
 
 ---

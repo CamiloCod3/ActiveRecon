@@ -10,17 +10,38 @@ from .modules.dns_analysis import analyze_dns
 from .modules.report_generator import generate_report
 from .modules.json_report import generate_json_report
 from .modules.config_loader import load_config
+from .modules.doctor import run_doctor
 from .modules.risk_analysis import generate_attention_findings
 from .modules.scope_guard import is_target_in_scope
 from .modules.tls_analysis import analyze_tls
 
 
-CONFIG = load_config()
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+CONFIG = None
+LOG_FORMAT = "%(asctime)s - %(levelname)s - %(message)s"
 
 
 DEFAULT_REPORT_DIR = "reports"
+
+
+def configure_logging(verbose=False, quiet=False):
+    if verbose:
+        level = logging.DEBUG
+    elif quiet:
+        level = logging.WARNING
+    else:
+        level = logging.INFO
+
+    root_logger = logging.getLogger()
+    if root_logger.handlers:
+        root_logger.setLevel(level)
+        for handler in root_logger.handlers:
+            handler.setLevel(level)
+    else:
+        logging.basicConfig(level=level, format=LOG_FORMAT)
+
+
+def get_config():
+    return CONFIG if CONFIG is not None else load_config()
 
 
 def _is_http_service(port):
@@ -71,7 +92,10 @@ def build_output_paths(target, output=None, output_format="both", now=None):
 
 def main():
     parser = argparse.ArgumentParser(description="Active Recon Tool")
-    parser.add_argument("--target", required=True, help="Target IP or domain")
+    parser.add_argument("--target", help="Target IP or domain")
+    parser.add_argument("--doctor", action="store_true", help="Check local dependencies and exit without scanning")
+    parser.add_argument("--verbose", action="store_true", help="Show debug logging")
+    parser.add_argument("--quiet", action="store_true", help="Only show warnings and errors")
     parser.add_argument(
         "--output",
         default=None,
@@ -86,18 +110,37 @@ def main():
     parser.add_argument("--scope", help="Optional scope file with allowed domains, IPs, or CIDRs")
     parser.add_argument("--dry-run", action="store_true", help="Validate options and show planned outputs without scanning")
 
-    scan_profile_choices = list(CONFIG["scan_profiles"].keys())
     parser.add_argument(
         "--scan-profile",
         default="fast",
-        choices=scan_profile_choices,
         help="Choose a pre-defined Nmap profile from config.yaml",
     )
 
     args = parser.parse_args()
+    if args.verbose and args.quiet:
+        parser.error("--verbose and --quiet cannot be used together")
+
+    configure_logging(args.verbose, args.quiet)
+
+    if args.doctor:
+        run_doctor(DEFAULT_REPORT_DIR)
+        return
+
+    if not args.target:
+        parser.error("--target is required unless --doctor is used")
+
+    try:
+        config = get_config()
+    except Exception as e:
+        parser.error(f"Could not load config: {e}")
+
+    scan_profiles = config.get("scan_profiles", {})
+    if args.scan_profile not in scan_profiles:
+        choices = ", ".join(sorted(scan_profiles)) or "none configured"
+        parser.error(f"Unknown scan profile '{args.scan_profile}'. Available profiles: {choices}")
 
     chosen_profile = args.scan_profile
-    scan_command = CONFIG["scan_profiles"][chosen_profile]
+    scan_command = scan_profiles[chosen_profile]
 
     target = args.target
     markdown_output, json_output = build_output_paths(target, args.output, args.output_format)
@@ -123,7 +166,7 @@ def main():
         return
 
     try:
-        nmap_results = run_nmap_scan(target, scan_command)
+        nmap_results = run_nmap_scan(target, scan_command, config)
         if not isinstance(nmap_results, dict):
             nmap_results = {"target": target, "ports": [], "error": "Nmap scan returned invalid results"}
         results["Nmap Scan"] = nmap_results
@@ -140,7 +183,7 @@ def main():
     if http_ports:
         try:
             logging.info(f"HTTP services found: {http_ports}. Running HTTP analysis.")
-            results["HTTP Analysis"] = analyze_http(target, CONFIG, http_ports)
+            results["HTTP Analysis"] = analyze_http(target, config, http_ports)
         except Exception as e:
             logging.error(f"Error during HTTP analysis: {e}")
             results["HTTP Analysis"] = {"error": f"HTTP analysis failed: {e}"}
@@ -150,7 +193,7 @@ def main():
 
     try:
         logging.info("Running TLS analysis.")
-        results["TLS Analysis"] = analyze_tls(results["HTTP Analysis"], CONFIG.get("http_timeout", 5))
+        results["TLS Analysis"] = analyze_tls(results["HTTP Analysis"], config.get("http_timeout", 5))
     except Exception as e:
         logging.error(f"Error during TLS analysis: {e}")
         results["TLS Analysis"] = {"error": f"TLS analysis failed: {e}"}

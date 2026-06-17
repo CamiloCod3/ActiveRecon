@@ -48,12 +48,16 @@ def test_generate_report_writes_nested_results(tmp_path):
 
     content = output.read_text(encoding="utf-8")
     assert "# Active Recon Report" in content
+    assert "## Summary" in content
+    assert "- **Open Ports:** 1" in content
+    assert "- **HTTP Services:** 1" in content
+    assert "- **DNS Records:** 1" in content
     assert "## HTTP Analysis" in content
     assert "http://example.com:80" in content
     assert "## DNS Analysis" in content
     assert "## TLS Analysis" in content
     assert "TLSv1.3" in content
-    assert "## Attention Findings" in content
+    assert "## Interesting Signals" in content
     assert "Missing Content-Security-Policy header" in content
     assert "192.0.2.10" in content
     assert "Lookup Error" in content
