@@ -15,7 +15,23 @@ def test_build_report_path_defaults_to_timestamped_reports_dir():
 
 
 def test_build_report_path_respects_explicit_output():
-    assert main_module.build_report_path("example.com", "custom.md") == "custom.md"
+    report_path = main_module.build_report_path(
+        "example.com",
+        "custom.md",
+        now=datetime(2026, 6, 17, 9, 8, 7),
+    )
+
+    assert report_path == str(Path("reports") / "custom_20260617_090807.md")
+
+
+def test_build_report_path_respects_explicit_output_directory(tmp_path):
+    report_path = main_module.build_report_path(
+        "example.com",
+        str(tmp_path / "custom.md"),
+        now=datetime(2026, 6, 17, 9, 8, 7),
+    )
+
+    assert report_path == str(tmp_path / "custom_20260617_090807.md")
 
 
 def test_main_smoke_with_mocked_modules(monkeypatch, tmp_path):
@@ -56,6 +72,11 @@ def test_main_smoke_with_mocked_modules(monkeypatch, tmp_path):
     monkeypatch.setattr(main_module, "generate_report", fake_report)
     monkeypatch.setattr(main_module, "generate_json_report", fake_json_report)
     monkeypatch.setattr(
+        main_module,
+        "datetime",
+        type("FixedDatetime", (), {"now": staticmethod(lambda: datetime(2026, 6, 17, 9, 8, 7))}),
+    )
+    monkeypatch.setattr(
         sys,
         "argv",
         ["activerecon", "--target", "example.com", "--scan-profile", "fast", "--output", str(output)],
@@ -65,8 +86,8 @@ def test_main_smoke_with_mocked_modules(monkeypatch, tmp_path):
 
     assert captured["http_ports"] == [{"portid": "80", "protocol": "tcp", "state": "open", "service": "http"}]
     assert captured["results"]["Nmap Scan"]["status"]["state"] == "up"
-    assert captured["output_file"] == str(output)
-    assert captured["json_output_file"] == str(output.with_suffix(".json"))
+    assert captured["output_file"] == str(tmp_path / "report_20260617_090807.md")
+    assert captured["json_output_file"] == str(tmp_path / "report_20260617_090807.json")
 
 
 def test_main_handles_failed_nmap_without_http(monkeypatch, tmp_path):
@@ -95,6 +116,11 @@ def test_main_handles_failed_nmap_without_http(monkeypatch, tmp_path):
     monkeypatch.setattr(main_module, "generate_report", fake_report)
     monkeypatch.setattr(main_module, "generate_json_report", fake_json_report)
     monkeypatch.setattr(
+        main_module,
+        "datetime",
+        type("FixedDatetime", (), {"now": staticmethod(lambda: datetime(2026, 6, 17, 9, 8, 7))}),
+    )
+    monkeypatch.setattr(
         sys,
         "argv",
         ["activerecon", "--target", "example.com", "--scan-profile", "fast", "--output", str(output)],
@@ -119,10 +145,27 @@ def test_build_output_paths_defaults_to_markdown_and_json():
 
 
 def test_build_output_paths_json_only_uses_explicit_output():
-    markdown, json_output = main_module.build_output_paths("example.com", "custom.json", "json")
+    markdown, json_output = main_module.build_output_paths(
+        "example.com",
+        "custom.json",
+        "json",
+        now=datetime(2026, 6, 17, 9, 8, 7),
+    )
 
     assert markdown is None
-    assert json_output == "custom.json"
+    assert json_output == str(Path("reports") / "custom_20260617_090807.json")
+
+
+def test_build_output_paths_bare_output_stays_in_reports_with_timestamp():
+    markdown, json_output = main_module.build_output_paths(
+        "scanme.nmap.org",
+        "report.md",
+        "both",
+        now=datetime(2026, 6, 17, 10, 28, 5),
+    )
+
+    assert markdown == str(Path("reports") / "report_20260617_102805.md")
+    assert json_output == str(Path("reports") / "report_20260617_102805.json")
 
 
 def test_main_uses_timestamped_default_output(monkeypatch):
