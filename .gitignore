@@ -17,3 +17,5 @@ reports/
 build/
 dist/
 *.egg-info/
+.pytest_cache/
+report.md
