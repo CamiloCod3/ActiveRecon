@@ -236,3 +236,66 @@ def test_cli_targets_export_scope_does_not_scan(monkeypatch, tmp_path, capsys):
     assert "ActiveRecon scope export completed" in captured_output.out
     assert "Targets exported: 1" in captured_output.out
     assert "Scans run: 0" in captured_output.out
+
+
+def test_cli_scope_check_allowed_and_runs_zero_scans(monkeypatch, tmp_path, capsys):
+    scope_file = tmp_path / "scope.json"
+    scope_file.write_text(
+        json.dumps({
+            "schema_version": "1.0",
+            "program": "Example Program",
+            "allowed": {"wildcards": ["*.example.com"]},
+            "denied": {},
+            "rules": {"notes": "test"},
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli, "run_recon", lambda options: (_ for _ in ()).throw(AssertionError()))
+
+    result = cli.main([
+        "scope",
+        "check",
+        "--target",
+        "api.example.com",
+        "--scope",
+        str(scope_file),
+    ])
+    captured_output = capsys.readouterr()
+
+    assert result == 0
+    assert "ActiveRecon scope check completed" in captured_output.out
+    assert "Target: api.example.com" in captured_output.out
+    assert f"Scope: {scope_file}" in captured_output.out
+    assert "Allowed: yes" in captured_output.out
+    assert "Program: Example Program" in captured_output.out
+    assert "Scans run: 0" in captured_output.out
+
+
+def test_cli_scope_check_denied_and_runs_zero_scans(monkeypatch, tmp_path, capsys):
+    scope_file = tmp_path / "scope.json"
+    scope_file.write_text(
+        json.dumps({
+            "schema_version": "1.0",
+            "program": "Example Program",
+            "allowed": {"wildcards": ["*.example.com"]},
+            "denied": {"domains": ["admin.example.com"]},
+            "rules": {},
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli, "run_recon", lambda options: (_ for _ in ()).throw(AssertionError()))
+
+    result = cli.main([
+        "scope",
+        "check",
+        "--target",
+        "admin.example.com",
+        "--scope",
+        str(scope_file),
+    ])
+    captured_output = capsys.readouterr()
+
+    assert result == 0
+    assert "Allowed: no" in captured_output.out
+    assert "denied.domains" in captured_output.out
+    assert "Scans run: 0" in captured_output.out

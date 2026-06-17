@@ -6,6 +6,7 @@ from .models import ReconOptions
 from .modules.doctor import run_doctor
 from .modules.json_report import build_json_summary
 from .output_paths import DEFAULT_REPORT_DIR
+from .policies.scope_policy import ScopePolicy
 from .runner import ReconValidationError, run_recon
 from .targets.target_diff import diff_inventories
 from .targets.target_inventory import (
@@ -86,6 +87,12 @@ def build_parser():
     export_parser = targets_subparsers.add_parser("export-scope", help="Export inventory hosts to a scope file")
     export_parser.add_argument("--inventory", required=True, help="Input inventory JSON file")
     export_parser.add_argument("--output", required=True, help="Output scope text file")
+
+    scope_parser = subparsers.add_parser("scope", help="Check whether a target is allowed by scope")
+    scope_subparsers = scope_parser.add_subparsers(dest="scope_action")
+    check_parser = scope_subparsers.add_parser("check", help="Evaluate one target against a scope file")
+    check_parser.add_argument("--target", required=True, help="Target IP, domain, or URL to evaluate")
+    check_parser.add_argument("--scope", required=True, help="Scope file (.txt or .json)")
     return parser
 
 
@@ -212,6 +219,21 @@ def run_targets_command(args, output=print):
     raise ValueError("targets requires a subcommand: import, diff, or export-scope")
 
 
+def run_scope_command(args, output=print):
+    if args.scope_action != "check":
+        raise ValueError("scope requires a subcommand: check")
+
+    evaluation = ScopePolicy.from_file(args.scope).evaluate(args.target)
+    output("ActiveRecon scope check completed")
+    output(f"Target: {args.target}")
+    output(f"Scope: {args.scope}")
+    output(f"Allowed: {'yes' if evaluation['allowed'] else 'no'}")
+    output(f"Reason: {evaluation['reason']}")
+    output(f"Program: {evaluation.get('program') or 'N/A'}")
+    output("Scans run: 0")
+    return 0
+
+
 def main(argv=None):
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -227,6 +249,13 @@ def main(argv=None):
     if args.command == "targets":
         try:
             return run_targets_command(args)
+        except (OSError, ValueError, json.JSONDecodeError) as e:
+            parser.error(str(e))
+            return 2
+
+    if args.command == "scope":
+        try:
+            return run_scope_command(args)
         except (OSError, ValueError, json.JSONDecodeError) as e:
             parser.error(str(e))
             return 2

@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0",
+  "program": "Local Lab",
+  "platform": "local",
+  "allowed": {
+    "domains": [
+      "localhost"
+    ],
+    "wildcards": [],
+    "urls": [
+      "http://127.0.0.1:3000/"
+    ],
+    "ips": [
+      "127.0.0.1"
+    ],
+    "cidrs": []
+  },
+  "denied": {
+    "domains": [],
+    "wildcards": [],
+    "urls": [],
+    "ips": [],
+    "cidrs": []
+  },
+  "rules": {
+    "notes": "Local lab scope only. Only scan systems you own or control."
+  }
+}

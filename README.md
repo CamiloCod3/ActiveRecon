@@ -264,6 +264,7 @@ activerecon --doctor
 activerecon targets import --input <TARGETS_FILE> --output <INVENTORY_JSON>
 activerecon targets diff --previous <OLD_JSON> --current <NEW_JSON>
 activerecon targets export-scope --inventory <INVENTORY_JSON> --output <SCOPE_FILE>
+activerecon scope check --target <TARGET> --scope <SCOPE_FILE>
 ```
 
 ### Arguments
@@ -385,6 +386,31 @@ allows:
 ```text
 app.example.com
 ```
+
+JSON scope files are also supported. Denied rules always override allowed rules.
+
+Supported JSON sections:
+
+```text
+allowed.domains
+allowed.wildcards
+allowed.urls
+allowed.ips
+allowed.cidrs
+denied.domains
+denied.wildcards
+denied.urls
+denied.ips
+denied.cidrs
+```
+
+Check a target against a scope file without scanning:
+
+```bash
+activerecon scope check --target api.example.com --scope docs/examples/scopes/example_program_scope.json
+```
+
+Scope checks print the matched reason and always report `Scans run: 0`.
 
 ---
 

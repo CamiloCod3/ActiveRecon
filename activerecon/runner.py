@@ -59,11 +59,13 @@ def _validate_scope(target, scope_file):
     if not scope_file:
         return
     try:
-        in_scope = ScopePolicy.from_file(scope_file).allows(target)
+        evaluation = ScopePolicy.from_file(scope_file).evaluate(target)
     except OSError as e:
         raise ReconValidationError(f"Could not read scope file {scope_file}: {e}") from e
-    if not in_scope:
-        raise ReconValidationError(f"Target is outside the allowed scope file: {scope_file}")
+    if not evaluation["allowed"]:
+        raise ReconValidationError(
+            f"Target is outside the allowed scope file: {scope_file}. {evaluation['reason']}"
+        )
 
 
 def run_recon(options: ReconOptions) -> ReconResult:

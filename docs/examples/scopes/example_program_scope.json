@@ -1,0 +1,34 @@
+{
+  "schema_version": "1.0",
+  "program": "Example Program",
+  "platform": "documentation",
+  "allowed": {
+    "domains": [
+      "example.com"
+    ],
+    "wildcards": [
+      "*.example.com"
+    ],
+    "urls": [
+      "https://api.example.com"
+    ],
+    "ips": [],
+    "cidrs": [
+      "192.0.2.0/24"
+    ]
+  },
+  "denied": {
+    "domains": [
+      "admin.example.com"
+    ],
+    "wildcards": [
+      "*.admin.example.com"
+    ],
+    "urls": [],
+    "ips": [],
+    "cidrs": []
+  },
+  "rules": {
+    "notes": "Documentation-only example scope. Do not scan real external targets without authorization."
+  }
+}
