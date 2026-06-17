@@ -38,9 +38,10 @@ def test_main_smoke_with_mocked_modules(monkeypatch, tmp_path):
     output = tmp_path / "report.md"
     captured = {}
 
-    def fake_nmap(target, scan_command):
+    def fake_nmap(target, scan_command, config):
         assert target == "example.com"
         assert scan_command == "-Pn"
+        assert config["http_timeout"] == 5
         return {
             "target": target,
             "ports": [{"portid": "80", "protocol": "tcp", "state": "open", "service": "http"}],
@@ -107,7 +108,7 @@ def test_main_handles_failed_nmap_without_http(monkeypatch, tmp_path):
     monkeypatch.setattr(
         main_module,
         "run_nmap_scan",
-        lambda target, scan_command: {"target": target, "ports": [], "error": "nmap failed"},
+        lambda target, scan_command, config: {"target": target, "ports": [], "error": "nmap failed"},
     )
     monkeypatch.setattr(main_module, "analyze_http", fake_http)
     monkeypatch.setattr(main_module, "analyze_tls", lambda http_results, timeout: [])
@@ -181,7 +182,7 @@ def test_main_uses_timestamped_default_output(monkeypatch):
     monkeypatch.setattr(
         main_module,
         "run_nmap_scan",
-        lambda target, scan_command: {"target": target, "ports": [], "status": {}, "scan_info": {}},
+        lambda target, scan_command, config: {"target": target, "ports": [], "status": {}, "scan_info": {}},
     )
     monkeypatch.setattr(main_module, "analyze_tls", lambda http_results, timeout: [])
     monkeypatch.setattr(main_module, "analyze_dns", lambda target: {"A": [], "MX": [], "TXT": []})
@@ -203,10 +204,30 @@ def test_main_uses_timestamped_default_output(monkeypatch):
 
 def test_main_dry_run_skips_scanning(monkeypatch):
     monkeypatch.setattr(main_module, "CONFIG", {"scan_profiles": {"fast": "-Pn"}, "http_timeout": 5})
-    monkeypatch.setattr(main_module, "run_nmap_scan", lambda target, scan_command: (_ for _ in ()).throw(AssertionError()))
+    monkeypatch.setattr(
+        main_module,
+        "run_nmap_scan",
+        lambda target, scan_command, config: (_ for _ in ()).throw(AssertionError()),
+    )
     monkeypatch.setattr(sys, "argv", ["activerecon", "--target", "example.com", "--dry-run"])
 
     main_module.main()
+
+
+def test_main_doctor_skips_scanning(monkeypatch):
+    called = []
+
+    monkeypatch.setattr(main_module, "run_doctor", lambda reports_dir: called.append(reports_dir))
+    monkeypatch.setattr(
+        main_module,
+        "run_nmap_scan",
+        lambda target, scan_command, config: (_ for _ in ()).throw(AssertionError()),
+    )
+    monkeypatch.setattr(sys, "argv", ["activerecon", "--doctor"])
+
+    main_module.main()
+
+    assert called == [main_module.DEFAULT_REPORT_DIR]
 
 
 def test_main_rejects_target_outside_scope(monkeypatch, tmp_path):
