@@ -8,6 +8,7 @@ SECURITY_HEADERS = {
     "x-frame-options": "Missing X-Frame-Options header",
     "x-content-type-options": "Missing X-Content-Type-Options header",
 }
+COMMON_HTTP_PORTS = {"80", "443", "3000", "5000", "8000", "8080", "8443", "9000", "9443"}
 
 
 def _finding(severity, category, message, evidence=None):
@@ -21,7 +22,14 @@ def _finding(severity, category, message, evidence=None):
 
 def _open_ports(results):
     nmap_results = results.get("Nmap Scan", {})
-    return nmap_results.get("ports", [])
+    ports = nmap_results.get("ports", [])
+    if not isinstance(ports, list):
+        return []
+    return [
+        port
+        for port in ports
+        if isinstance(port, dict) and str(port.get("state", "")).lower() == "open"
+    ]
 
 
 def _http_results(results):
@@ -47,7 +55,7 @@ def generate_attention_findings(results, now=None):
         portid = str(port.get("portid", ""))
         if portid in {"21", "23", "3389"}:
             findings.append(_finding("medium", "exposure", f"Sensitive remote access service exposed on port {portid}", service))
-        elif portid in {"80", "443", "8080", "8443"} or "http" in service:
+        elif portid in COMMON_HTTP_PORTS or "http" in service:
             findings.append(_finding("info", "http", f"HTTP service detected on port {portid}", service))
 
     for item in _http_results(results):

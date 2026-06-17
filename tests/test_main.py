@@ -34,6 +34,12 @@ def test_build_report_path_respects_explicit_output_directory(tmp_path):
     assert report_path == str(tmp_path / "custom_20260617_090807.md")
 
 
+def test_is_http_service_detects_open_dev_port():
+    assert main_module._is_http_service({"portid": "3000", "state": "open", "service": "ppp"})
+    assert not main_module._is_http_service({"portid": "3000", "state": "closed", "service": "ppp"})
+    assert not main_module._is_http_service({"portid": "8080", "state": "filtered", "service": "http"})
+
+
 def test_main_smoke_with_mocked_modules(monkeypatch, tmp_path):
     output = tmp_path / "report.md"
     captured = {}
@@ -228,6 +234,56 @@ def test_main_doctor_skips_scanning(monkeypatch):
     main_module.main()
 
     assert called == [main_module.DEFAULT_REPORT_DIR]
+
+
+def test_main_skips_dns_for_ip_target(monkeypatch, tmp_path):
+    output = tmp_path / "report.md"
+    captured = {}
+
+    def fake_nmap(target, scan_command, config):
+        return {
+            "target": target,
+            "ports": [{"portid": "3000", "protocol": "tcp", "state": "open", "service": "ppp"}],
+            "status": {"state": "up"},
+            "scan_info": {},
+            "host": target,
+        }
+
+    def fake_http(target, config, http_ports):
+        captured["http_ports"] = http_ports
+        return [{"url": "http://127.0.0.1:3000", "status": 200, "headers": {}}]
+
+    def fake_report(target, results, output_file):
+        captured["results"] = results
+
+    monkeypatch.setattr(main_module, "CONFIG", {"scan_profiles": {"fast": "-Pn"}, "http_timeout": 5})
+    monkeypatch.setattr(main_module, "run_nmap_scan", fake_nmap)
+    monkeypatch.setattr(main_module, "analyze_http", fake_http)
+    monkeypatch.setattr(main_module, "analyze_tls", lambda http_results, timeout: [])
+    monkeypatch.setattr(
+        main_module,
+        "analyze_dns",
+        lambda target: (_ for _ in ()).throw(AssertionError("DNS should be skipped for IP targets")),
+    )
+    monkeypatch.setattr(main_module, "generate_attention_findings", lambda results: [])
+    monkeypatch.setattr(main_module, "generate_report", fake_report)
+    monkeypatch.setattr(main_module, "generate_json_report", lambda target, results, output_file: None)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["activerecon", "--target", "127.0.0.1", "--scan-profile", "fast", "--output", str(output)],
+    )
+
+    main_module.main()
+
+    assert captured["http_ports"] == [{"portid": "3000", "protocol": "tcp", "state": "open", "service": "ppp"}]
+    assert captured["results"]["DNS Analysis"] == {
+        "skipped": True,
+        "reason": "DNS analysis skipped for IP address target",
+        "A": [],
+        "MX": [],
+        "TXT": [],
+    }
 
 
 def test_main_rejects_target_outside_scope(monkeypatch, tmp_path):
