@@ -52,13 +52,36 @@ def test_generate_report_writes_nested_results(tmp_path):
         },
         "Endpoint Discovery": [{
             "base_url": "http://example.com",
-            "endpoints": [{
-                "path": "/api",
-                "source": "well-known",
-                "confidence": "medium",
-                "status_code": 200,
-                "content_type": "application/json",
-            }],
+            "endpoints": [
+                {
+                    "path": "/api",
+                    "source": "well-known",
+                    "confidence": "medium",
+                    "status_code": 200,
+                    "content_type": "application/json",
+                },
+                {
+                    "path": "/login",
+                    "source": "html:href",
+                    "confidence": "medium",
+                    "status_code": 200,
+                    "content_type": "text/html",
+                    "note": "Possible SPA fallback route",
+                },
+                {
+                    "path": "/robots.txt",
+                    "source": "well-known",
+                    "confidence": "medium",
+                    "status_code": 200,
+                    "content_type": "text/plain",
+                },
+                {"path": "/app.js", "source": "html:script-src", "confidence": "medium"},
+                {"path": "/style.css", "source": "html:stylesheet", "confidence": "medium"},
+                {"path": "/favicon.ico", "source": "html:icon", "confidence": "medium"},
+                {"path": "/assets/logo.png", "source": "html:src", "confidence": "medium"},
+                {"path": "/assets/chunk-1.js", "source": "html:script-src", "confidence": "medium"},
+                {"path": "/assets/extra.css", "source": "html:stylesheet", "confidence": "medium"},
+            ],
         }],
         "Attention": [{
             "severity": "low",
@@ -99,7 +122,19 @@ def test_generate_report_writes_nested_results(tmp_path):
     assert "  - `Server`: test" in content
     assert "## Endpoint Discovery" in content
     assert "### http://example.com" in content
+    assert "#### API-like Endpoints" in content
+    assert "#### Frontend Routes" in content
+    assert "#### Well-known / Probed Paths" in content
+    assert "#### Static Assets" in content
     assert "`/api` - **Source:** well-known - **Confidence:** medium - **Status:** 200 - **Content-Type:** application/json" in content
+    assert "`/login` - **Source:** html:href - **Confidence:** medium - **Status:** 200 - **Content-Type:** text/html - **Note:** Possible SPA fallback route" in content
+    assert "`/robots.txt` - **Source:** well-known - **Confidence:** medium - **Status:** 200 - **Content-Type:** text/plain" in content
+    assert "- **Total Static Assets:** 6" in content
+    assert "`/app.js` - **Source:** html:script-src" in content
+    assert "`/style.css` - **Source:** html:stylesheet" in content
+    assert "`/favicon.ico` - **Source:** html:icon" in content
+    assert "/assets/extra.css" not in content
+    assert "1 additional static assets omitted from Markdown." in content
     assert "## DNS Analysis" in content
     assert "## TLS Analysis" in content
     assert "TLSv1.3" in content
