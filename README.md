@@ -11,24 +11,24 @@
 
 **A Python-based reconnaissance CLI tool for authorized security assessments, lab environments, and security learning.**
 
-ActiveRecon combines **Nmap scanning, DNS analysis, HTTP service detection, TLS checks, header collection, JSON output, Markdown reporting, and interesting signal generation** into a structured recon workflow.
+ActiveRecon combines **Nmap scanning, HTTP and TLS analysis, DNS checks, web endpoint discovery, Markdown reports, JSON schema output, and interesting signal generation** into a structured recon workflow.
 
 </div>
 
 ---
 
-## Demo
+## Quick Start
 
-> Terminal demo GIF coming soon.
+Run a web-focused recon workflow and save timestamped Markdown and JSON reports under `reports/`:
 
-```text
-docs/demo.gif
+```bash
+activerecon --target 127.0.0.1 --scan-profile web --output juice-shop
 ```
 
-When added, place it here:
+Check your local setup without scanning anything:
 
-```markdown
-![ActiveRecon Demo](docs/demo.gif)
+```bash
+activerecon --doctor
 ```
 
 ---
@@ -50,14 +50,14 @@ ActiveRecon helps organize early-stage reconnaissance into a repeatable command-
 Instead of manually running separate commands and collecting notes from different tools, ActiveRecon can:
 
 * run predefined Nmap scan profiles
-* check local setup with a no-scan doctor command
-* identify open services
-* detect HTTP services from scan results
-* collect HTTP status, headers, redirects, page titles, and technology hints
+* check local setup with a no-scan `--doctor` command
+* identify open, closed, and filtered port results
+* detect HTTP services from open Nmap ports, including common web and development ports
+* collect HTTP status, final URLs, redirects, page titles, headers, missing security headers, and technology hints
 * collect TLS certificate metadata for HTTPS services
-* query common DNS records
-* run a richer web reconnaissance workflow from the `web` scan profile
-* generate Markdown and JSON reports
+* query A, MX, and TXT DNS records, while skipping noisy DNS lookups for IP address targets
+* run endpoint discovery automatically from the `web` scan profile
+* generate timestamped Markdown and JSON reports under `reports/`
 * highlight interesting signals for follow-up review
 
 This project is intended for learning, lab use, portfolio development, and authorized testing.
@@ -70,16 +70,16 @@ This project is intended for learning, lab use, portfolio development, and autho
 
 ActiveRecon currently supports:
 
-| Area      | Capability                                                 |
-| --------- | ---------------------------------------------------------- |
-| Nmap      | Predefined scan profiles, XML parsing, timeout handling    |
-| HTTP      | Status codes, titles, redirects, headers, technology hints |
-| TLS       | TLS version, cipher, certificate metadata                  |
-| DNS       | A, MX, and TXT lookups                                     |
-| Web       | Endpoint discovery from HTML, headers, JavaScript, and safe well-known paths |
-| Reporting | Markdown and JSON output                                   |
-| Safety    | Scope guard, dry-run mode, doctor checks                   |
-| Analysis  | Interesting signals for follow-up review                   |
+| Area      | Capability                                                                 |
+| --------- | -------------------------------------------------------------------------- |
+| Nmap      | Scan profiles, executable discovery, XML parsing, timeout and error results |
+| HTTP      | Status, title, final URL, redirects, headers, missing headers, tech hints   |
+| TLS       | TLS version, cipher, subject, issuer, and certificate validity dates         |
+| DNS       | Separate A, MX, and TXT lookups, with clean IP-target skip behavior          |
+| Web       | Endpoint discovery from HTML, headers, JavaScript, robots.txt, and probes    |
+| Reporting | Timestamped Markdown and JSON schema `1.1` reports                           |
+| Safety    | Responsible-use notice, scope guard, dry-run mode, doctor checks             |
+| Analysis  | Low-noise interesting signals for follow-up review                           |
 
 ---
 
@@ -96,10 +96,12 @@ Current profiles:
 | Profile    | Purpose                                                          |
 | ---------- | ---------------------------------------------------------------- |
 | `fast`     | Quick scan using top ports                                       |
-| `web`      | Web-focused scan for common HTTP/HTTPS and development ports     |
+| `web`      | Web workflow for HTTP/HTTPS and common development ports         |
 | `standard` | More detailed TCP scan with service and default script detection |
 | `full`     | Full TCP port scan with service and default script detection     |
 | `udp`      | UDP scan using top UDP ports and script timeout                  |
+
+The `web` profile is a workflow preset. It runs the web-focused Nmap profile, HTTP analysis, TLS analysis where applicable, endpoint discovery, interesting signal generation, and Markdown plus JSON reporting.
 
 ---
 
@@ -115,6 +117,18 @@ Run a web-focused scan:
 
 ```bash
 activerecon --target 127.0.0.1 --scan-profile web --output juice-shop
+```
+
+Generate only JSON output:
+
+```bash
+activerecon --target example.com --scan-profile web --output example-web --output-format json
+```
+
+Preview planned report paths without scanning:
+
+```bash
+activerecon --target example.com --scan-profile fast --dry-run
 ```
 
 Run a full TCP scan:
@@ -161,13 +175,22 @@ Generated Markdown reports include sections such as:
 ## Interesting Signals
 ```
 
+Markdown reports also include:
+
+* a scan context note for local, private, Docker, virtualization, or lab targets
+* open ports shown before other port states
+* endpoint discovery grouped into API-like endpoints, frontend routes, well-known/probed paths, and static assets
+* static asset summaries instead of long asset lists
+* cautious wording such as "follow-up recommended" instead of confirmed vulnerability language
+
 Example interesting signals:
 
 ```text
 INFO   [http]       HTTP service detected on port 3000
 LOW    [http]       Missing Content-Security-Policy header
 INFO   [cors]       Wildcard CORS header observed
-INFO   [endpoint]   Interesting path found in response header
+INFO   [endpoint]   API-like endpoint discovered; follow-up recommended
+INFO   [endpoint]   Interesting path found in response header X-Recruiting
 INFO   [technology] X-Powered-By header exposed
 ```
 
@@ -192,6 +215,8 @@ sudo apt-get install nmap
 On Windows, install Nmap from the official installer and make sure `nmap.exe` is available in PATH.
 
 ActiveRecon also attempts to resolve Nmap from common Windows install paths.
+
+The `--doctor` command checks Python, Nmap availability, the resolved Nmap path, config loading, and whether the reports directory is writable.
 
 ---
 
@@ -309,7 +334,7 @@ app.example.com
 
 ## JSON Schema
 
-The JSON report uses a simple stable wrapper:
+The JSON report uses schema version `1.1` and keeps existing result keys for backwards compatibility.
 
 ```json
 {
@@ -321,16 +346,35 @@ The JSON report uses a simple stable wrapper:
     "scan_profile": "web",
     "authorized_use_notice": true
   },
-  "summary": {},
+  "summary": {
+    "host_status": "up",
+    "total_ports_listed": 5,
+    "open_ports": 3,
+    "http_services": 1,
+    "tls_results": 0,
+    "dns_records": 1,
+    "interesting_signals": 4,
+    "endpoint_count": 6
+  },
   "results": {}
 }
 ```
+
+Top-level metadata may include:
+
+| Field                   | Meaning                                             |
+| ----------------------- | --------------------------------------------------- |
+| `tool`                  | Tool name, currently `ActiveRecon`                  |
+| `scan_profile`          | Selected scan profile when available                |
+| `scan_context`          | Local/private/lab context note when applicable      |
+| `authorized_use_notice` | Always `true` to mark authorized-use expectations   |
 
 The `results` object contains the same major sections used by the Markdown report, including:
 
 ```text
 Nmap Scan
 HTTP Analysis
+Endpoint Discovery
 TLS Analysis
 DNS Analysis
 Attention
@@ -339,7 +383,20 @@ Interesting Signals
 
 Markdown reports use the heading `Interesting Signals`. JSON output keeps `results["Attention"]` for backwards compatibility. New JSON consumers should prefer `results["Interesting Signals"]`.
 
-When the `web` profile is used, reports also include `Endpoint Discovery` with the original endpoint list plus summary counts and categorized endpoint groups.
+When the `web` profile is used, `results["Endpoint Discovery"]` keeps the original flat `endpoints` list and also adds machine-readable summary and category fields.
+
+Endpoint discovery categories currently include:
+
+```text
+api_like
+frontend_routes
+static_assets
+well_known
+header_discovered
+realtime_services
+```
+
+The JSON `endpoint_count` counts unique endpoint paths from the flat endpoint list.
 
 ---
 
@@ -393,12 +450,12 @@ This project demonstrates practical skills in:
 
 ## Roadmap
 
-Planned improvements include:
+Possible future improvements include:
 
-* richer web scanning for the `web` profile
-* endpoint discovery from HTML, headers, and JavaScript
 * multi-target scanning
 * screenshot support for HTTP services
+* optional SARIF or CSV export
+* richer TLS and certificate risk checks
 * modern Python packaging with `pyproject.toml`
 
 ---
