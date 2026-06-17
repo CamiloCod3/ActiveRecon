@@ -9,6 +9,7 @@ SECURITY_HEADERS = {
     "x-content-type-options": "Missing X-Content-Type-Options header",
 }
 COMMON_HTTP_PORTS = {"80", "443", "3000", "5000", "8000", "8080", "8443", "9000", "9443"}
+WILDCARD_CORS_HEADER = "access-control-allow-origin"
 
 
 def _finding(severity, category, message, evidence=None):
@@ -52,6 +53,21 @@ def _is_https_result(item):
     return url.startswith("https://")
 
 
+def _response_headers(item):
+    headers = item.get("headers", {})
+    return headers if isinstance(headers, dict) else {}
+
+
+def _first_path_like_header_value(value):
+    values = value if isinstance(value, (list, tuple, set)) else [value]
+    for raw_value in values:
+        for candidate in str(raw_value).split(","):
+            path = candidate.strip().strip("\"'")
+            if path.startswith("/") and len(path) > 1:
+                return path
+    return None
+
+
 def generate_attention_findings(results, now=None):
     findings = []
 
@@ -72,6 +88,23 @@ def generate_attention_findings(results, now=None):
                 continue
             if header_name in item.get("missing_security_headers", []):
                 findings.append(_finding("low", "http", message, item.get("url", "")))
+
+        for header_name, value in _response_headers(item).items():
+            normalized_header = str(header_name).lower()
+            if normalized_header == WILDCARD_CORS_HEADER and str(value).strip() == "*":
+                findings.append(_finding("info", "cors", "Wildcard CORS header observed", item.get("url", "")))
+
+            path = _first_path_like_header_value(value)
+            if path:
+                findings.append(
+                    _finding(
+                        "info",
+                        "endpoint",
+                        f"Interesting path found in response header {header_name}",
+                        path,
+                    )
+                )
+
         if item.get("redirect_chain"):
             findings.append(_finding("info", "http", "HTTP redirects observed", " -> ".join(item["redirect_chain"])))
 

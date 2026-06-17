@@ -19,6 +19,8 @@ def _write_markdown_list(f, label, values):
 
 
 def _write_http_result(f, item):
+    f.write(f"- **Nmap Service:** {item.get('service', 'Unknown')}\n")
+    f.write("- **Detected HTTP:** yes\n")
     f.write(f"- **Status:** {item.get('status', 'N/A')}\n")
     if item.get("title"):
         f.write(f"- **Title:** {item['title']}\n")
@@ -101,7 +103,7 @@ def generate_report(target, results, output_file):
         f.write(f"- **Host:** {nmap_results.get('host', 'Unknown')}\n")
         f.write("---\n\n")
 
-        f.write("## Open Ports\n\n")
+        f.write("## Port Scan Results\n\n")
         ports = nmap_results.get("ports", [])
         if ports:
             for port in ports:
@@ -111,7 +113,7 @@ def generate_report(target, results, output_file):
                     f"- **Service:** {port.get('service', 'Unknown')}\n"
                 )
         else:
-            f.write("No open ports found.\n")
+            f.write("No port scan results found.\n")
         f.write("---\n\n")
 
         f.write("## HTTP Analysis\n\n")

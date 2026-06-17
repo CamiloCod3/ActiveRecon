@@ -82,6 +82,31 @@ def test_generate_attention_findings_reports_hsts_only_for_https():
     assert messages.count("Missing X-Content-Type-Options header") == 2
 
 
+def test_generate_attention_findings_reports_cors_and_header_paths_as_info():
+    results = {
+        "HTTP Analysis": [{
+            "url": "http://example.com",
+            "headers": {
+                "Access-Control-Allow-Origin": "*",
+                "X-Recruiting": "/#/jobs",
+                "X-Plain": "no path here",
+            },
+        }],
+    }
+
+    findings = generate_attention_findings(results)
+    cors_finding = next(item for item in findings if item["category"] == "cors")
+    endpoint_finding = next(item for item in findings if item["category"] == "endpoint")
+
+    assert cors_finding["severity"] == "info"
+    assert cors_finding["message"] == "Wildcard CORS header observed"
+    assert cors_finding["evidence"] == "http://example.com"
+    assert endpoint_finding["severity"] == "info"
+    assert endpoint_finding["message"] == "Interesting path found in response header X-Recruiting"
+    assert endpoint_finding["evidence"] == "/#/jobs"
+    assert all(item.get("evidence") != "no path here" for item in findings)
+
+
 def test_generate_attention_findings_reports_expired_tls_certificates():
     results = {
         "TLS Analysis": [{

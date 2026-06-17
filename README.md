@@ -292,7 +292,7 @@ Generated Markdown reports include sections such as:
 
 ## Summary
 ## Scan Information
-## Open Ports
+## Port Scan Results
 ## HTTP Analysis
 ## TLS Analysis
 ## DNS Analysis
