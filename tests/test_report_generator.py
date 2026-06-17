@@ -18,6 +18,7 @@ def test_generate_report_writes_nested_results(tmp_path):
         "HTTP Analysis": [{
             "url": "http://example.com:80",
             "final_url": "https://example.com/login",
+            "service": "ppp",
             "status": 200,
             "title": "Example App",
             "redirect_chain": ["http://example.com:80", "https://example.com/login"],
@@ -57,8 +58,12 @@ def test_generate_report_writes_nested_results(tmp_path):
     assert "- **Open Ports:** 1" in content
     assert "- **HTTP Services:** 1" in content
     assert "- **DNS Records:** 1" in content
+    assert "## Port Scan Results" in content
+    assert "## Open Ports" not in content
     assert "## HTTP Analysis" in content
     assert "http://example.com:80" in content
+    assert "- **Nmap Service:** ppp" in content
+    assert "- **Detected HTTP:** yes" in content
     assert "- **Status:** 200" in content
     assert "- **Title:** Example App" in content
     assert "- **Final URL:** https://example.com/login" in content
