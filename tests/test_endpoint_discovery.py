@@ -18,7 +18,10 @@ def test_discover_endpoints_extracts_html_js_headers_and_safe_probes(monkeypatch
             return Response(
                 headers={"Content-Type": "text/html"},
                 text="""
+                    <title>Juice Shop</title>
                     <a href="/login">login</a>
+                    <link rel="stylesheet" href="/style.css">
+                    <link rel="icon" href="/favicon.ico">
                     <form action="/submit"></form>
                     <script src="/app.js"></script>
                     <script>fetch("/rest/products")</script>
@@ -33,7 +36,12 @@ def test_discover_endpoints_extracts_html_js_headers_and_safe_probes(monkeypatch
         if url == "http://example.com:3000/api":
             return Response(headers={"Content-Type": "application/json"}, text="{}", url=url)
         if url == "http://example.com:3000/admin":
-            return Response(status_code=403, headers={"Content-Type": "text/html"}, text="", url=url)
+            return Response(
+                status_code=200,
+                headers={"Content-Type": "text/html"},
+                text="<title>Juice Shop</title><main></main>",
+                url=url,
+            )
         return Response(status_code=404, headers={"Content-Type": "text/plain"}, text="", url=url)
 
     monkeypatch.setattr(endpoint_discovery.requests, "get", fake_get)
@@ -61,6 +69,9 @@ def test_discover_endpoints_extracts_html_js_headers_and_safe_probes(monkeypatch
     assert results[0]["base_url"] == "http://example.com:3000"
     assert endpoints["/#/jobs"]["source"] == "response-header:X-Recruiting"
     assert endpoints["/login"]["source"] == "html:href"
+    assert endpoints["/style.css"]["source"] == "html:stylesheet"
+    assert endpoints["/favicon.ico"]["source"] == "html:icon"
+    assert endpoints["/app.js"]["source"] == "html:script-src"
     assert endpoints["/submit"]["source"] == "html:form-action"
     assert endpoints["/rest/products"]["source"] == "html-string"
     assert endpoints["/api/orders"]["source"] == "javascript"
@@ -68,7 +79,8 @@ def test_discover_endpoints_extracts_html_js_headers_and_safe_probes(monkeypatch
     assert endpoints["/robots.txt"]["content_type"] == "text/plain"
     assert endpoints["/hidden"]["source"] == "robots.txt"
     assert endpoints["/api"]["status_code"] == 200
-    assert endpoints["/admin"]["status_code"] == 403
+    assert endpoints["/admin"]["status_code"] == 200
+    assert endpoints["/admin"]["note"] == "Possible SPA fallback route"
     assert not any("cdn.example.net" in url for url, timeout in calls)
 
 

@@ -22,6 +22,7 @@ DEFAULT_WELL_KNOWN_PATHS = [
 DEFAULT_ENDPOINT_LIMIT = 50
 DEFAULT_HTTP_TIMEOUT = 5
 PATH_STRING_RE = re.compile(r"""["'`](/[A-Za-z0-9._~:/?#\[\]@!$&()*+,;=%-]{1,200})["'`]""")
+TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", flags=re.IGNORECASE | re.DOTALL)
 
 
 class EndpointHTMLParser(HTMLParser):
@@ -34,13 +35,21 @@ class EndpointHTMLParser(HTMLParser):
         attrs_dict = dict(attrs)
 
         if "href" in attrs_dict:
-            self.links.append((attrs_dict["href"], "html:href"))
+            rel = str(attrs_dict.get("rel", "")).lower()
+            if tag == "link" and "stylesheet" in rel:
+                self.links.append((attrs_dict["href"], "html:stylesheet"))
+            elif tag == "link" and "icon" in rel:
+                self.links.append((attrs_dict["href"], "html:icon"))
+            else:
+                self.links.append((attrs_dict["href"], "html:href"))
+        if tag == "script" and attrs_dict.get("src"):
+            self.links.append((attrs_dict["src"], "html:script-src"))
+            self.script_srcs.append(attrs_dict["src"])
         if "src" in attrs_dict:
-            self.links.append((attrs_dict["src"], "html:src"))
+            if tag != "script":
+                self.links.append((attrs_dict["src"], "html:src"))
         if tag == "form" and attrs_dict.get("action"):
             self.links.append((attrs_dict["action"], "html:form-action"))
-        if tag == "script" and attrs_dict.get("src"):
-            self.script_srcs.append(attrs_dict["src"])
 
 
 def _web_recon_settings(config):
@@ -124,7 +133,7 @@ def _confidence(source):
     return "low"
 
 
-def _add_endpoint(endpoints, path, source, limit, status_code=None, content_type=None):
+def _add_endpoint(endpoints, path, source, limit, status_code=None, content_type=None, note=None):
     if not path or not path.startswith("/") or path.startswith("//") or len(path) > 250:
         return
     if path not in endpoints and len(endpoints) >= limit:
@@ -141,6 +150,8 @@ def _add_endpoint(endpoints, path, source, limit, status_code=None, content_type
         endpoints[path]["status_code"] = status_code
     if content_type:
         endpoints[path]["content_type"] = content_type
+    if note:
+        endpoints[path]["note"] = note
 
 
 def _extract_paths_from_text(text):
@@ -173,6 +184,13 @@ def _safe_get(url, timeout):
 
 def _content_type(response):
     return response.headers.get("Content-Type") or response.headers.get("content-type") or ""
+
+
+def _title_from_html(text):
+    match = TITLE_RE.search(text or "")
+    if not match:
+        return None
+    return re.sub(r"\s+", " ", match.group(1)).strip()
 
 
 def _is_found_probe(response):
@@ -244,8 +262,10 @@ def discover_endpoints(http_results, config=None):
                 _add_endpoint(endpoints, path, f"response-header:{header_name}", endpoint_limit)
 
         page_response = get_if_allowed(base_url)
+        root_title = None
         if page_response is not None and page_response.status_code < 400 and "html" in _content_type(page_response).lower():
             html_text = getattr(page_response, "text", "")[:200000]
+            root_title = _title_from_html(html_text)
             parser = _parse_html(html_text)
             for raw_link, source in parser.links:
                 path = _normalize_candidate(raw_link, base_url, same_origin_only)
@@ -272,6 +292,14 @@ def discover_endpoints(http_results, config=None):
             response = get_if_allowed(urljoin(base_origin, path))
             if not _is_found_probe(response):
                 continue
+            note = None
+            if (
+                response.status_code == 200
+                and root_title
+                and "html" in _content_type(response).lower()
+                and _title_from_html(getattr(response, "text", "")[:200000]) == root_title
+            ):
+                note = "Possible SPA fallback route"
             _add_endpoint(
                 endpoints,
                 path,
@@ -279,6 +307,7 @@ def discover_endpoints(http_results, config=None):
                 endpoint_limit,
                 status_code=response.status_code,
                 content_type=_content_type(response),
+                note=note,
             )
             if path == "/robots.txt" and response.status_code < 400:
                 for disallow_path in _robots_disallow_paths(getattr(response, "text", "")):

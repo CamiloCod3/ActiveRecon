@@ -1,5 +1,6 @@
 import ipaddress
 import logging
+from pathlib import PurePosixPath
 from pathlib import Path
 
 
@@ -73,6 +74,94 @@ def _write_http_result(f, item):
             f.write(f"  - `{key}`: {value}\n")
 
 
+STATIC_ASSET_EXTENSIONS = {
+    ".css",
+    ".eot",
+    ".gif",
+    ".ico",
+    ".jpeg",
+    ".jpg",
+    ".js",
+    ".map",
+    ".png",
+    ".svg",
+    ".ttf",
+    ".webp",
+    ".woff",
+    ".woff2",
+}
+WELL_KNOWN_REPORT_PATHS = {
+    "/robots.txt",
+    "/sitemap.xml",
+    "/.well-known/security.txt",
+    "/swagger",
+    "/api-docs",
+    "/ftp",
+}
+
+
+def _path_without_query(path):
+    return str(path or "/").split("?", 1)[0].split("#", 1)[0]
+
+
+def _is_api_like_endpoint(path):
+    lower_path = str(path or "").lower()
+    return lower_path == "/api" or lower_path == "/rest" or lower_path.startswith("/api/") or lower_path.startswith("/rest/")
+
+
+def _is_static_asset(path):
+    clean_path = _path_without_query(path).lower()
+    filename = PurePosixPath(clean_path).name
+    return PurePosixPath(clean_path).suffix in STATIC_ASSET_EXTENSIONS or "chunk" in filename
+
+
+def _endpoint_category(endpoint):
+    path = endpoint.get("path", "")
+    lower_path = str(path).lower()
+    if _is_static_asset(path):
+        return "Static Assets"
+    if _is_api_like_endpoint(path):
+        return "API-like Endpoints"
+    if lower_path in WELL_KNOWN_REPORT_PATHS:
+        return "Well-known / Probed Paths"
+    return "Frontend Routes"
+
+
+def _endpoint_line(endpoint):
+    line = (
+        f"- `{endpoint.get('path', '/')}` "
+        f"- **Source:** {endpoint.get('source', 'unknown')} "
+        f"- **Confidence:** {endpoint.get('confidence', 'low')}"
+    )
+    if endpoint.get("status_code") is not None:
+        line += f" - **Status:** {endpoint['status_code']}"
+    if endpoint.get("content_type"):
+        line += f" - **Content-Type:** {endpoint['content_type']}"
+    if endpoint.get("note"):
+        line += f" - **Note:** {endpoint['note']}"
+    return line
+
+
+def _write_endpoint_category(f, title, endpoints):
+    if not endpoints:
+        return
+    f.write(f"#### {title}\n\n")
+    if title == "Static Assets":
+        f.write(f"- **Total Static Assets:** {len(endpoints)}\n")
+        for endpoint in endpoints[:5]:
+            f.write(f"{_endpoint_line(endpoint)}\n")
+        if len(endpoints) > 5:
+            f.write(f"- {len(endpoints) - 5} additional static assets omitted from Markdown.\n")
+        f.write("\n")
+        return
+
+    for endpoint in endpoints[:50]:
+        f.write(f"{_endpoint_line(endpoint)}\n")
+    if len(endpoints) > 50:
+        f.write(f"- Output trimmed. {len(endpoints) - 50} additional endpoints omitted.\n")
+    f.write("\n")
+
+
 def _write_endpoint_discovery(f, endpoint_results):
     f.write("## Endpoint Discovery\n\n")
     if isinstance(endpoint_results, dict) and endpoint_results.get("error"):
@@ -92,20 +181,18 @@ def _write_endpoint_discovery(f, endpoint_results):
         if not endpoints:
             f.write("- No endpoints discovered.\n\n")
             continue
-        for endpoint in endpoints[:50]:
-            line = (
-                f"- `{endpoint.get('path', '/')}` "
-                f"- **Source:** {endpoint.get('source', 'unknown')} "
-                f"- **Confidence:** {endpoint.get('confidence', 'low')}"
-            )
-            if endpoint.get("status_code") is not None:
-                line += f" - **Status:** {endpoint['status_code']}"
-            if endpoint.get("content_type"):
-                line += f" - **Content-Type:** {endpoint['content_type']}"
-            f.write(f"{line}\n")
-        if len(endpoints) > 50:
-            f.write(f"- Output trimmed. {len(endpoints) - 50} additional endpoints omitted.\n")
-        f.write("\n")
+
+        categorized = {
+            "API-like Endpoints": [],
+            "Frontend Routes": [],
+            "Well-known / Probed Paths": [],
+            "Static Assets": [],
+        }
+        for endpoint in endpoints:
+            categorized[_endpoint_category(endpoint)].append(endpoint)
+
+        for title in ("API-like Endpoints", "Frontend Routes", "Well-known / Probed Paths", "Static Assets"):
+            _write_endpoint_category(f, title, categorized[title])
 
     f.write("---\n\n")
 

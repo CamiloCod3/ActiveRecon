@@ -124,11 +124,38 @@ def test_generate_attention_findings_reports_cors_and_header_paths_as_info():
     assert cors_finding["evidence"] == "http://example.com"
     assert endpoint_finding["severity"] == "info"
     assert endpoint_finding["message"] == "Interesting path found in response header X-Recruiting"
-    assert endpoint_finding["evidence"] == "/#/jobs"
+    assert endpoint_finding["evidence"] == "http://example.com/#/jobs"
     assert technology_finding["severity"] == "info"
     assert technology_finding["message"] == "X-Powered-By header exposed"
     assert technology_finding["evidence"] == "Express - http://example.com"
     assert all(item.get("evidence") != "no path here" for item in findings)
+
+
+def test_generate_attention_findings_deduplicates_response_header_endpoint_signals():
+    results = {
+        "HTTP Analysis": [{
+            "url": "http://example.com",
+            "headers": {"X-Recruiting": "/#/jobs"},
+        }],
+        "Endpoint Discovery": [{
+            "base_url": "http://example.com",
+            "endpoints": [
+                {"path": "/#/jobs", "source": "response-header:X-Recruiting"},
+            ],
+        }],
+    }
+
+    findings = generate_attention_findings(results)
+    messages = [item["message"] for item in findings]
+    header_findings = [
+        item
+        for item in findings
+        if item["message"] == "Interesting path found in response header X-Recruiting"
+    ]
+
+    assert len(header_findings) == 1
+    assert header_findings[0]["evidence"] == "http://example.com/#/jobs"
+    assert "Interesting endpoint from response header" not in messages
 
 
 def test_generate_attention_findings_reports_endpoint_discovery_signals():
@@ -150,13 +177,13 @@ def test_generate_attention_findings_reports_endpoint_discovery_signals():
     findings = generate_attention_findings(results)
     messages = [item["message"] for item in findings]
 
-    assert "API-like endpoint discovered" in messages
-    assert "robots.txt found" in messages
-    assert "robots.txt contains Disallow paths" in messages
-    assert "Interesting endpoint from response header" in messages
-    assert "JavaScript exposes API-like paths" in messages
-    assert "Possible admin/debug/docs route discovered" in messages
-    assert "/ftp endpoint discovered" in messages
+    assert "API-like endpoint discovered; follow-up recommended" in messages
+    assert "robots.txt found; follow-up recommended" in messages
+    assert "robots.txt contains Disallow paths; follow-up recommended" in messages
+    assert "Interesting path found in response header X-Recruiting" in messages
+    assert "JavaScript exposes API-like path candidate" in messages
+    assert "Possible admin/debug/docs route discovered; follow-up recommended" in messages
+    assert "/ftp endpoint discovered; follow-up recommended" in messages
 
 
 def test_generate_attention_findings_reports_expired_tls_certificates():

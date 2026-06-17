@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
+from urllib.parse import urlparse
 
 
 SECURITY_HEADERS = {
@@ -98,6 +99,33 @@ def _is_admin_debug_docs_path(path):
     return any(token in lower_path for token in ("/admin", "/debug", "/swagger", "/api-docs"))
 
 
+def _url_origin(url):
+    parsed = urlparse(str(url or ""))
+    if not parsed.scheme or not parsed.netloc:
+        return ""
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def _endpoint_evidence(base_url, path):
+    if not base_url:
+        return str(path or "")
+    if not path:
+        return str(base_url)
+    return f"{str(base_url).rstrip('/')}/{str(path).lstrip('/')}"
+
+
+def _http_header_path_evidence(item, path):
+    origin = _url_origin(item.get("final_url") or item.get("url"))
+    return _endpoint_evidence(origin, path) if origin else str(path or "")
+
+
+def _header_name_from_source(source):
+    prefix, separator, header_name = str(source or "").partition(":")
+    if prefix == "response-header" and separator and header_name:
+        return header_name
+    return "response header"
+
+
 def generate_attention_findings(results, now=None):
     findings = []
     seen_endpoint_signals = set()
@@ -142,13 +170,11 @@ def generate_attention_findings(results, now=None):
 
             path = _first_path_like_header_value(value)
             if path:
-                findings.append(
-                    _finding(
-                        "info",
-                        "endpoint",
-                        f"Interesting path found in response header {header_name}",
-                        path,
-                    )
+                add_endpoint_signal(
+                    "info",
+                    "endpoint",
+                    f"Interesting path found in response header {header_name}",
+                    _http_header_path_evidence(item, path),
                 )
 
         if item.get("redirect_chain"):
@@ -157,23 +183,29 @@ def generate_attention_findings(results, now=None):
     for base_url, endpoint in _endpoint_items(results):
         path = endpoint.get("path", "")
         source = endpoint.get("source", "")
-        evidence = f"{base_url}{path}" if base_url else path
+        evidence = _endpoint_evidence(base_url, path)
 
         if path == "/robots.txt" and endpoint.get("status_code") is not None:
-            add_endpoint_signal("info", "endpoint", "robots.txt found", evidence)
+            add_endpoint_signal("info", "endpoint", "robots.txt found; follow-up recommended", evidence)
         if source == "robots.txt":
-            add_endpoint_signal("info", "endpoint", "robots.txt contains Disallow paths", evidence)
+            add_endpoint_signal("info", "endpoint", "robots.txt contains Disallow paths; follow-up recommended", evidence)
         if source.startswith("response-header"):
-            add_endpoint_signal("info", "endpoint", "Interesting endpoint from response header", evidence)
+            header_name = _header_name_from_source(source)
+            add_endpoint_signal(
+                "info",
+                "endpoint",
+                f"Interesting path found in response header {header_name}",
+                evidence,
+            )
         if _is_api_like_path(path):
             if source.startswith("javascript"):
-                add_endpoint_signal("info", "endpoint", "JavaScript exposes API-like paths", evidence)
+                add_endpoint_signal("info", "endpoint", "JavaScript exposes API-like path candidate", evidence)
             else:
-                add_endpoint_signal("info", "endpoint", "API-like endpoint discovered", evidence)
+                add_endpoint_signal("info", "endpoint", "API-like endpoint discovered; follow-up recommended", evidence)
         if _is_admin_debug_docs_path(path):
-            add_endpoint_signal("info", "endpoint", "Possible admin/debug/docs route discovered", evidence)
+            add_endpoint_signal("info", "endpoint", "Possible admin/debug/docs route discovered; follow-up recommended", evidence)
         if str(path).lower() == "/ftp":
-            add_endpoint_signal("info", "endpoint", "/ftp endpoint discovered", evidence)
+            add_endpoint_signal("info", "endpoint", "/ftp endpoint discovered; follow-up recommended", evidence)
 
     now = now or datetime.now(timezone.utc)
     comparable_now = now.replace(tzinfo=None)
