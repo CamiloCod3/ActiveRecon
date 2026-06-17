@@ -58,3 +58,39 @@ def test_analyze_http_defaults_timeout_and_records_errors(monkeypatch):
 
     assert results[0]["url"] == "http://example.com:8080"
     assert "timed out" in results[0]["error"]
+
+
+def test_analyze_http_filters_hsts_missing_header_for_plain_http(monkeypatch):
+    class PlainResponse:
+        status_code = 200
+        url = "http://example.com:80"
+        history = []
+        headers = {"Content-Type": "text/html"}
+        text = "<title>Plain HTTP</title>"
+
+    class SecureResponse:
+        status_code = 200
+        url = "https://example.com:443"
+        history = []
+        headers = {"Content-Type": "text/html"}
+        text = "<title>HTTPS</title>"
+
+    def fake_get(url, timeout):
+        if url.startswith("https://"):
+            return SecureResponse()
+        return PlainResponse()
+
+    monkeypatch.setattr(requests, "get", fake_get)
+
+    results = analyze_http(
+        "example.com",
+        {},
+        [
+            {"portid": "80", "service": "http"},
+            {"portid": "443", "service": "https"},
+        ],
+    )
+
+    assert "strict-transport-security" not in results[0]["missing_security_headers"]
+    assert "content-security-policy" in results[0]["missing_security_headers"]
+    assert "strict-transport-security" in results[1]["missing_security_headers"]

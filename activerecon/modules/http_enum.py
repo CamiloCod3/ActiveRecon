@@ -32,6 +32,12 @@ def _security_headers(headers):
     return present, missing
 
 
+def _filter_missing_headers_for_url(missing_headers, url):
+    if str(url or "").lower().startswith("https://"):
+        return missing_headers
+    return [header for header in missing_headers if header != "strict-transport-security"]
+
+
 def _technology_hints(headers):
     hints = []
     server = headers.get("Server") or headers.get("server")
@@ -81,9 +87,11 @@ def analyze_http(target, config, http_ports):
             response = requests.get(url, timeout=timeout)
             headers = dict(response.headers)
             present_headers, missing_headers = _security_headers(headers)
+            final_url = getattr(response, "url", url)
+            missing_headers = _filter_missing_headers_for_url(missing_headers, final_url)
             results.append({
                 "url": url,
-                "final_url": getattr(response, "url", url),
+                "final_url": final_url,
                 "port": portid,
                 "service": service or scheme,
                 "status": response.status_code,
