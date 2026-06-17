@@ -53,3 +53,11 @@ def test_generate_report_writes_errors(tmp_path):
     assert "nmap failed" in content
     assert "http failed" in content
     assert "dns failed" in content
+
+
+def test_generate_report_creates_parent_directories(tmp_path):
+    output = tmp_path / "reports" / "example_20260617_090807.md"
+
+    generate_report("example.com", {"Nmap Scan": {"status": {}, "scan_info": {}, "ports": []}}, str(output))
+
+    assert output.exists()

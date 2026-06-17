@@ -1,5 +1,8 @@
 import argparse
 import logging
+import re
+from datetime import datetime
+from pathlib import Path
 
 from .modules.nmap_scan import run_nmap_scan
 from .modules.http_enum import analyze_http
@@ -11,6 +14,9 @@ from .modules.config_loader import load_config
 CONFIG = load_config()
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+
+DEFAULT_REPORT_DIR = "reports"
 
 
 def _is_http_service(port):
@@ -29,10 +35,28 @@ def _get_http_ports(nmap_results):
     return [port for port in ports if _is_http_service(port)]
 
 
+def _safe_report_name(target):
+    safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", target).strip("._-")
+    return safe_name or "target"
+
+
+def build_report_path(target, output=None, now=None):
+    if output:
+        return output
+
+    timestamp = (now or datetime.now()).strftime("%Y%m%d_%H%M%S")
+    filename = f"{_safe_report_name(target)}_{timestamp}.md"
+    return str(Path(DEFAULT_REPORT_DIR) / filename)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Active Recon Tool")
     parser.add_argument("--target", required=True, help="Target IP or domain")
-    parser.add_argument("--output", default="report.md", help="Output file for the report")
+    parser.add_argument(
+        "--output",
+        default=None,
+        help="Output file for the report. Defaults to reports/<target>_<timestamp>.md",
+    )
 
     scan_profile_choices = list(CONFIG["scan_profiles"].keys())
     parser.add_argument(
@@ -48,6 +72,7 @@ def main():
     scan_command = CONFIG["scan_profiles"][chosen_profile]
 
     target = args.target
+    output_file = build_report_path(target, args.output)
     results = {}
 
     logging.info(f"Starting automated recon on target: {target}")
@@ -87,8 +112,8 @@ def main():
         results["DNS Analysis"] = {"error": f"DNS analysis failed: {e}"}
 
     try:
-        generate_report(target, results, args.output)
-        logging.info(f"Recon completed successfully! Report saved to {args.output}")
+        generate_report(target, results, output_file)
+        logging.info(f"Recon completed successfully! Report saved to {output_file}")
     except Exception as e:
         logging.error(f"Error during report generation: {e}")
 
