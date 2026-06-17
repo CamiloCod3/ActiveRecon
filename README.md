@@ -313,7 +313,7 @@ The JSON report uses a simple stable wrapper:
 
 ```json
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "generated_at": "2026-06-17T09:08:07Z",
   "target": "example.com",
   "metadata": {
@@ -337,7 +337,7 @@ Attention
 Interesting Signals
 ```
 
-Markdown reports use the heading `Interesting Signals`. JSON output keeps the `Attention` key for compatibility and also includes `Interesting Signals` as an alias.
+Markdown reports use the heading `Interesting Signals`. JSON output keeps `results["Attention"]` for backwards compatibility. New JSON consumers should prefer `results["Interesting Signals"]`.
 
 When the `web` profile is used, reports also include `Endpoint Discovery` with the original endpoint list plus summary counts and categorized endpoint groups.
 
