@@ -254,8 +254,8 @@ activerecon --doctor
 | `--output-format` | `md`, `json`, or `both`. Defaults to `both`                                            |
 | `--scope`         | Optional file with allowed domains, IPs, or CIDR ranges                                |
 | `--dry-run`       | Validate arguments and planned outputs without scanning                                |
-| `--verbose`       | Show debug logging                                                                     |
-| `--quiet`         | Show only warnings and errors                                                          |
+| `--verbose`       | Show detailed internal logs                                                            |
+| `--quiet`         | Suppress the normal summary and show only errors plus report paths                     |
 
 ---
 
