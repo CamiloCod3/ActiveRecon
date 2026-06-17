@@ -44,11 +44,17 @@ def test_main_smoke_with_mocked_modules(monkeypatch, tmp_path):
         captured["results"] = results
         captured["output_file"] = output_file
 
+    def fake_json_report(target, results, output_file):
+        captured["json_output_file"] = output_file
+
     monkeypatch.setattr(main_module, "CONFIG", {"scan_profiles": {"fast": "-Pn"}, "http_timeout": 5})
     monkeypatch.setattr(main_module, "run_nmap_scan", fake_nmap)
     monkeypatch.setattr(main_module, "analyze_http", fake_http)
+    monkeypatch.setattr(main_module, "analyze_tls", lambda http_results, timeout: [])
     monkeypatch.setattr(main_module, "analyze_dns", fake_dns)
+    monkeypatch.setattr(main_module, "generate_attention_findings", lambda results: [])
     monkeypatch.setattr(main_module, "generate_report", fake_report)
+    monkeypatch.setattr(main_module, "generate_json_report", fake_json_report)
     monkeypatch.setattr(
         sys,
         "argv",
@@ -60,6 +66,7 @@ def test_main_smoke_with_mocked_modules(monkeypatch, tmp_path):
     assert captured["http_ports"] == [{"portid": "80", "protocol": "tcp", "state": "open", "service": "http"}]
     assert captured["results"]["Nmap Scan"]["status"]["state"] == "up"
     assert captured["output_file"] == str(output)
+    assert captured["json_output_file"] == str(output.with_suffix(".json"))
 
 
 def test_main_handles_failed_nmap_without_http(monkeypatch, tmp_path):
@@ -72,6 +79,9 @@ def test_main_handles_failed_nmap_without_http(monkeypatch, tmp_path):
     def fake_report(target, results, output_file):
         captured["results"] = results
 
+    def fake_json_report(target, results, output_file):
+        captured["json_output_file"] = output_file
+
     monkeypatch.setattr(main_module, "CONFIG", {"scan_profiles": {"fast": "-Pn"}, "http_timeout": 5})
     monkeypatch.setattr(
         main_module,
@@ -79,8 +89,11 @@ def test_main_handles_failed_nmap_without_http(monkeypatch, tmp_path):
         lambda target, scan_command: {"target": target, "ports": [], "error": "nmap failed"},
     )
     monkeypatch.setattr(main_module, "analyze_http", fake_http)
+    monkeypatch.setattr(main_module, "analyze_tls", lambda http_results, timeout: [])
     monkeypatch.setattr(main_module, "analyze_dns", lambda target: {"A": [], "MX": [], "TXT": []})
+    monkeypatch.setattr(main_module, "generate_attention_findings", lambda results: [])
     monkeypatch.setattr(main_module, "generate_report", fake_report)
+    monkeypatch.setattr(main_module, "generate_json_report", fake_json_report)
     monkeypatch.setattr(
         sys,
         "argv",
@@ -91,6 +104,25 @@ def test_main_handles_failed_nmap_without_http(monkeypatch, tmp_path):
 
     assert captured["results"]["Nmap Scan"]["error"] == "nmap failed"
     assert captured["results"]["HTTP Analysis"] == []
+    assert captured["results"]["TLS Analysis"] == []
+
+
+def test_build_output_paths_defaults_to_markdown_and_json():
+    markdown, json_output = main_module.build_output_paths(
+        "example.com",
+        output_format="both",
+        now=datetime(2026, 6, 17, 9, 8, 7),
+    )
+
+    assert markdown == str(Path("reports") / "example.com_20260617_090807.md")
+    assert json_output == str(Path("reports") / "example.com_20260617_090807.json")
+
+
+def test_build_output_paths_json_only_uses_explicit_output():
+    markdown, json_output = main_module.build_output_paths("example.com", "custom.json", "json")
+
+    assert markdown is None
+    assert json_output == "custom.json"
 
 
 def test_main_uses_timestamped_default_output(monkeypatch):
@@ -99,14 +131,20 @@ def test_main_uses_timestamped_default_output(monkeypatch):
     def fake_report(target, results, output_file):
         captured["output_file"] = output_file
 
+    def fake_json_report(target, results, output_file):
+        captured["json_output_file"] = output_file
+
     monkeypatch.setattr(main_module, "CONFIG", {"scan_profiles": {"fast": "-Pn"}, "http_timeout": 5})
     monkeypatch.setattr(
         main_module,
         "run_nmap_scan",
         lambda target, scan_command: {"target": target, "ports": [], "status": {}, "scan_info": {}},
     )
+    monkeypatch.setattr(main_module, "analyze_tls", lambda http_results, timeout: [])
     monkeypatch.setattr(main_module, "analyze_dns", lambda target: {"A": [], "MX": [], "TXT": []})
+    monkeypatch.setattr(main_module, "generate_attention_findings", lambda results: [])
     monkeypatch.setattr(main_module, "generate_report", fake_report)
+    monkeypatch.setattr(main_module, "generate_json_report", fake_json_report)
     monkeypatch.setattr(
         main_module,
         "datetime",
@@ -117,3 +155,49 @@ def test_main_uses_timestamped_default_output(monkeypatch):
     main_module.main()
 
     assert captured["output_file"] == str(Path("reports") / "example.com_20260617_090807.md")
+    assert captured["json_output_file"] == str(Path("reports") / "example.com_20260617_090807.json")
+
+
+def test_main_dry_run_skips_scanning(monkeypatch):
+    monkeypatch.setattr(main_module, "CONFIG", {"scan_profiles": {"fast": "-Pn"}, "http_timeout": 5})
+    monkeypatch.setattr(main_module, "run_nmap_scan", lambda target, scan_command: (_ for _ in ()).throw(AssertionError()))
+    monkeypatch.setattr(sys, "argv", ["activerecon", "--target", "example.com", "--dry-run"])
+
+    main_module.main()
+
+
+def test_main_rejects_target_outside_scope(monkeypatch, tmp_path):
+    scope = tmp_path / "scope.txt"
+    scope.write_text("allowed.example.com\n", encoding="utf-8")
+
+    monkeypatch.setattr(main_module, "CONFIG", {"scan_profiles": {"fast": "-Pn"}, "http_timeout": 5})
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["activerecon", "--target", "example.com", "--scope", str(scope), "--dry-run"],
+    )
+
+    try:
+        main_module.main()
+    except SystemExit as e:
+        assert e.code == 2
+    else:
+        raise AssertionError("Expected scope validation to reject target")
+
+
+def test_main_rejects_missing_scope_file(monkeypatch, tmp_path):
+    missing_scope = tmp_path / "missing.txt"
+
+    monkeypatch.setattr(main_module, "CONFIG", {"scan_profiles": {"fast": "-Pn"}, "http_timeout": 5})
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["activerecon", "--target", "example.com", "--scope", str(missing_scope), "--dry-run"],
+    )
+
+    try:
+        main_module.main()
+    except SystemExit as e:
+        assert e.code == 2
+    else:
+        raise AssertionError("Expected missing scope file to reject target")
