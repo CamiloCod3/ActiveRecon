@@ -82,7 +82,7 @@ Generate a structured Markdown report containing:
 ## Example Workflow
 
 ```bash
-activerecon --target example.com --scan-profile fast --output report.md
+activerecon --target example.com --scan-profile fast
 ```
 
 This command will:
@@ -93,6 +93,12 @@ This command will:
 4. Collect HTTP status and header details.
 5. Query DNS records.
 6. Generate a Markdown report.
+
+By default, reports are saved under `reports/` with a timestamped filename such as:
+
+```text
+reports/example.com_20260617_090807.md
+```
 
 ---
 
@@ -127,13 +133,13 @@ After installation, the `activerecon` command should be available from your term
 ## Usage
 
 ```bash
-activerecon --target <IP_OR_DOMAIN> --scan-profile <PROFILE> --output <OUTPUT_FILE>
+activerecon --target <IP_OR_DOMAIN> --scan-profile <PROFILE> [--output <OUTPUT_FILE>]
 ```
 
 ### Example
 
 ```bash
-activerecon --target example.com --scan-profile fast --output report.md
+activerecon --target example.com --scan-profile fast
 ```
 
 ### Arguments
@@ -142,7 +148,7 @@ activerecon --target example.com --scan-profile fast --output report.md
 | ---------------- | -------------------------------- |
 | `--target`       | Target IP address or domain name |
 | `--scan-profile` | Nmap scan profile to use         |
-| `--output`       | Markdown report output file      |
+| `--output`       | Optional Markdown report output file. Defaults to `reports/<target>_<timestamp>.md` |
 
 ### Available Scan Profiles
 

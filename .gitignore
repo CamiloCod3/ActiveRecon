@@ -12,7 +12,8 @@ __pycache__/
 .vscode/
 .idea/
 
-reports/
+reports/*
+!reports/.gitkeep
 
 build/
 dist/

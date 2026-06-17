@@ -1,6 +1,21 @@
 import sys
+from datetime import datetime
+from pathlib import Path
 
 import activerecon.main as main_module
+
+
+def test_build_report_path_defaults_to_timestamped_reports_dir():
+    report_path = main_module.build_report_path(
+        "https://example.com:443/path",
+        now=datetime(2026, 6, 17, 9, 8, 7),
+    )
+
+    assert report_path == str(Path("reports") / "https_example.com_443_path_20260617_090807.md")
+
+
+def test_build_report_path_respects_explicit_output():
+    assert main_module.build_report_path("example.com", "custom.md") == "custom.md"
 
 
 def test_main_smoke_with_mocked_modules(monkeypatch, tmp_path):
@@ -76,3 +91,29 @@ def test_main_handles_failed_nmap_without_http(monkeypatch, tmp_path):
 
     assert captured["results"]["Nmap Scan"]["error"] == "nmap failed"
     assert captured["results"]["HTTP Analysis"] == []
+
+
+def test_main_uses_timestamped_default_output(monkeypatch):
+    captured = {}
+
+    def fake_report(target, results, output_file):
+        captured["output_file"] = output_file
+
+    monkeypatch.setattr(main_module, "CONFIG", {"scan_profiles": {"fast": "-Pn"}, "http_timeout": 5})
+    monkeypatch.setattr(
+        main_module,
+        "run_nmap_scan",
+        lambda target, scan_command: {"target": target, "ports": [], "status": {}, "scan_info": {}},
+    )
+    monkeypatch.setattr(main_module, "analyze_dns", lambda target: {"A": [], "MX": [], "TXT": []})
+    monkeypatch.setattr(main_module, "generate_report", fake_report)
+    monkeypatch.setattr(
+        main_module,
+        "datetime",
+        type("FixedDatetime", (), {"now": staticmethod(lambda: datetime(2026, 6, 17, 9, 8, 7))}),
+    )
+    monkeypatch.setattr(sys, "argv", ["activerecon", "--target", "example.com", "--scan-profile", "fast"])
+
+    main_module.main()
+
+    assert captured["output_file"] == str(Path("reports") / "example.com_20260617_090807.md")

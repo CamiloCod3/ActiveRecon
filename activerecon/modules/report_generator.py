@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 
 
 def _format_error(error):
@@ -13,8 +14,10 @@ def generate_report(target, results, output_file):
     nmap_results = results.get("Nmap Scan", results)
     http_results = results.get("HTTP Analysis", [])
     dns_results = results.get("DNS Analysis", {})
+    output_path = Path(output_file)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with open(output_file, "w", encoding="utf-8") as f:
+    with output_path.open("w", encoding="utf-8") as f:
         f.write("# Active Recon Report\n\n")
         f.write(f"**Target:** {target}\n")
         f.write(f"**Host Status:** {nmap_results.get('status', {}).get('state', 'Unknown')}\n")
