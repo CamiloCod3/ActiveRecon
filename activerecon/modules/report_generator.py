@@ -73,6 +73,43 @@ def _write_http_result(f, item):
             f.write(f"  - `{key}`: {value}\n")
 
 
+def _write_endpoint_discovery(f, endpoint_results):
+    f.write("## Endpoint Discovery\n\n")
+    if isinstance(endpoint_results, dict) and endpoint_results.get("error"):
+        f.write(f"**Error:** {endpoint_results['error']}\n")
+        f.write("---\n\n")
+        return
+
+    groups = endpoint_results if isinstance(endpoint_results, list) else []
+    if not groups:
+        f.write("No endpoints discovered.\n")
+        f.write("---\n\n")
+        return
+
+    for group in groups:
+        f.write(f"### {group.get('base_url', 'Unknown base URL')}\n\n")
+        endpoints = group.get("endpoints", [])
+        if not endpoints:
+            f.write("- No endpoints discovered.\n\n")
+            continue
+        for endpoint in endpoints[:50]:
+            line = (
+                f"- `{endpoint.get('path', '/')}` "
+                f"- **Source:** {endpoint.get('source', 'unknown')} "
+                f"- **Confidence:** {endpoint.get('confidence', 'low')}"
+            )
+            if endpoint.get("status_code") is not None:
+                line += f" - **Status:** {endpoint['status_code']}"
+            if endpoint.get("content_type"):
+                line += f" - **Content-Type:** {endpoint['content_type']}"
+            f.write(f"{line}\n")
+        if len(endpoints) > 50:
+            f.write(f"- Output trimmed. {len(endpoints) - 50} additional endpoints omitted.\n")
+        f.write("\n")
+
+    f.write("---\n\n")
+
+
 def build_report_summary(results):
     nmap_results = results.get("Nmap Scan", results)
     ports = _as_list(nmap_results.get("ports", []))
@@ -107,6 +144,7 @@ def generate_report(target, results, output_file):
     logging.info(f"Generating report to: {output_file}")
     nmap_results = results.get("Nmap Scan", results)
     http_results = results.get("HTTP Analysis", [])
+    endpoint_results = results.get("Endpoint Discovery")
     tls_results = results.get("TLS Analysis", [])
     dns_results = results.get("DNS Analysis", {})
     attention_results = results.get("Attention", [])
@@ -175,6 +213,9 @@ def generate_report(target, results, output_file):
         else:
             f.write("No HTTP services analyzed.\n")
         f.write("---\n\n")
+
+        if "Endpoint Discovery" in results:
+            _write_endpoint_discovery(f, endpoint_results)
 
         f.write("## TLS Analysis\n\n")
         if isinstance(tls_results, dict) and tls_results.get("error"):

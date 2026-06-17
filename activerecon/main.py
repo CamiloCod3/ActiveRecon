@@ -12,6 +12,7 @@ from .modules.report_generator import generate_report
 from .modules.json_report import generate_json_report
 from .modules.config_loader import load_config
 from .modules.doctor import run_doctor
+from .modules.endpoint_discovery import discover_endpoints
 from .modules.risk_analysis import generate_attention_findings
 from .modules.scope_guard import is_target_in_scope
 from .modules.tls_analysis import analyze_tls
@@ -79,6 +80,12 @@ def _dns_skip_result():
         "MX": [],
         "TXT": [],
     }
+
+
+def _web_recon_enabled(config, scan_profile):
+    web_recon = config.get("web_recon", {}) if isinstance(config, dict) else {}
+    enabled_profiles = web_recon.get("enabled_profiles", [])
+    return scan_profile in enabled_profiles
 
 
 def _safe_report_name(target):
@@ -218,6 +225,14 @@ def main():
     except Exception as e:
         logging.error(f"Error during TLS analysis: {e}")
         results["TLS Analysis"] = {"error": f"TLS analysis failed: {e}"}
+
+    if _web_recon_enabled(config, chosen_profile):
+        try:
+            logging.info("Running endpoint discovery.")
+            results["Endpoint Discovery"] = discover_endpoints(results["HTTP Analysis"], config)
+        except Exception as e:
+            logging.error(f"Error during endpoint discovery: {e}")
+            results["Endpoint Discovery"] = {"error": f"Endpoint discovery failed: {e}"}
 
     if _is_ip_target(target):
         logging.info(DNS_IP_SKIP_REASON)

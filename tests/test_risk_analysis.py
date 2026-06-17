@@ -131,6 +131,34 @@ def test_generate_attention_findings_reports_cors_and_header_paths_as_info():
     assert all(item.get("evidence") != "no path here" for item in findings)
 
 
+def test_generate_attention_findings_reports_endpoint_discovery_signals():
+    results = {
+        "Endpoint Discovery": [{
+            "base_url": "http://example.com",
+            "endpoints": [
+                {"path": "/api", "source": "well-known", "status_code": 200},
+                {"path": "/robots.txt", "source": "well-known", "status_code": 200},
+                {"path": "/hidden", "source": "robots.txt"},
+                {"path": "/#/jobs", "source": "response-header:X-Recruiting"},
+                {"path": "/api/orders", "source": "javascript"},
+                {"path": "/admin", "source": "well-known", "status_code": 403},
+                {"path": "/ftp", "source": "well-known", "status_code": 200},
+            ],
+        }],
+    }
+
+    findings = generate_attention_findings(results)
+    messages = [item["message"] for item in findings]
+
+    assert "API-like endpoint discovered" in messages
+    assert "robots.txt found" in messages
+    assert "robots.txt contains Disallow paths" in messages
+    assert "Interesting endpoint from response header" in messages
+    assert "JavaScript exposes API-like paths" in messages
+    assert "Possible admin/debug/docs route discovered" in messages
+    assert "/ftp endpoint discovered" in messages
+
+
 def test_generate_attention_findings_reports_expired_tls_certificates():
     results = {
         "TLS Analysis": [{

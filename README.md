@@ -56,6 +56,7 @@ Instead of manually running separate commands and collecting notes from differen
 * collect HTTP status, headers, redirects, page titles, and technology hints
 * collect TLS certificate metadata for HTTPS services
 * query common DNS records
+* run a richer web reconnaissance workflow from the `web` scan profile
 * generate Markdown and JSON reports
 * highlight interesting signals for follow-up review
 
@@ -75,6 +76,7 @@ ActiveRecon currently supports:
 | HTTP      | Status codes, titles, redirects, headers, technology hints |
 | TLS       | TLS version, cipher, certificate metadata                  |
 | DNS       | A, MX, and TXT lookups                                     |
+| Web       | Endpoint discovery from HTML, headers, JavaScript, and safe well-known paths |
 | Reporting | Markdown and JSON output                                   |
 | Safety    | Scope guard, dry-run mode, doctor checks                   |
 | Analysis  | Interesting signals for follow-up review                   |
@@ -153,6 +155,7 @@ Generated Markdown reports include sections such as:
 ## Scan Information
 ## Port Scan Results
 ## HTTP Analysis
+## Endpoint Discovery
 ## TLS Analysis
 ## DNS Analysis
 ## Interesting Signals
@@ -254,6 +257,25 @@ scan_profiles:
   standard: "-Pn -n -sT -sV -sC -T3"
   full: "-Pn -n -sT -p- -sV -sC -T4"
   udp: "-Pn -n -sU --top-ports 100 -sC --script-timeout 5m"
+
+web_recon:
+  enabled_profiles:
+    - web
+  endpoint_probe_limit: 50
+  fetch_javascript: true
+  same_origin_only: true
+  well_known_paths:
+    - /robots.txt
+    - /sitemap.xml
+    - /.well-known/security.txt
+    - /api
+    - /rest
+    - /ftp
+    - /admin
+    - /login
+    - /debug
+    - /swagger
+    - /api-docs
 ```
 
 ---
@@ -310,6 +332,8 @@ Attention
 
 Markdown reports use the heading `Interesting Signals`. JSON output keeps the `Attention` key for compatibility.
 
+When the `web` profile is used, reports also include `Endpoint Discovery`.
+
 ---
 
 ## Project Structure
@@ -324,6 +348,7 @@ ActiveRecon/
 |       |-- config_loader.py
 |       |-- dns_analysis.py
 |       |-- doctor.py
+|       |-- endpoint_discovery.py
 |       |-- http_enum.py
 |       |-- json_report.py
 |       |-- nmap_scan.py

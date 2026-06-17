@@ -50,6 +50,16 @@ def test_generate_report_writes_nested_results(tmp_path):
             "TXT": [],
             "errors": {"MX": "missing"},
         },
+        "Endpoint Discovery": [{
+            "base_url": "http://example.com",
+            "endpoints": [{
+                "path": "/api",
+                "source": "well-known",
+                "confidence": "medium",
+                "status_code": 200,
+                "content_type": "application/json",
+            }],
+        }],
         "Attention": [{
             "severity": "low",
             "category": "http",
@@ -87,6 +97,9 @@ def test_generate_report_writes_nested_results(tmp_path):
     assert "  - `server:test`" in content
     assert "- **Response Headers:**" in content
     assert "  - `Server`: test" in content
+    assert "## Endpoint Discovery" in content
+    assert "### http://example.com" in content
+    assert "`/api` - **Source:** well-known - **Confidence:** medium - **Status:** 200 - **Content-Type:** application/json" in content
     assert "## DNS Analysis" in content
     assert "## TLS Analysis" in content
     assert "TLSv1.3" in content

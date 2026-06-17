@@ -286,6 +286,59 @@ def test_main_skips_dns_for_ip_target(monkeypatch, tmp_path):
     }
 
 
+def test_main_web_profile_runs_endpoint_discovery(monkeypatch, tmp_path):
+    output = tmp_path / "report.md"
+    captured = {}
+
+    def fake_nmap(target, scan_command, config):
+        assert scan_command == "-web"
+        return {
+            "target": target,
+            "ports": [{"portid": "3000", "protocol": "tcp", "state": "open", "service": "ppp"}],
+            "status": {"state": "up"},
+            "scan_info": {},
+            "host": target,
+        }
+
+    def fake_http(target, config, http_ports):
+        return [{"url": "http://example.com:3000", "status": 200, "headers": {}}]
+
+    def fake_endpoints(http_results, config):
+        captured["endpoint_http_results"] = http_results
+        return [{"base_url": "http://example.com:3000", "endpoints": [{"path": "/api", "source": "well-known"}]}]
+
+    def fake_report(target, results, output_file):
+        captured["results"] = results
+
+    monkeypatch.setattr(
+        main_module,
+        "CONFIG",
+        {
+            "scan_profiles": {"web": "-web"},
+            "http_timeout": 5,
+            "web_recon": {"enabled_profiles": ["web"]},
+        },
+    )
+    monkeypatch.setattr(main_module, "run_nmap_scan", fake_nmap)
+    monkeypatch.setattr(main_module, "analyze_http", fake_http)
+    monkeypatch.setattr(main_module, "analyze_tls", lambda http_results, timeout: [])
+    monkeypatch.setattr(main_module, "discover_endpoints", fake_endpoints)
+    monkeypatch.setattr(main_module, "analyze_dns", lambda target: {"A": [], "MX": [], "TXT": []})
+    monkeypatch.setattr(main_module, "generate_attention_findings", lambda results: [])
+    monkeypatch.setattr(main_module, "generate_report", fake_report)
+    monkeypatch.setattr(main_module, "generate_json_report", lambda target, results, output_file: None)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["activerecon", "--target", "example.com", "--scan-profile", "web", "--output", str(output)],
+    )
+
+    main_module.main()
+
+    assert captured["endpoint_http_results"] == [{"url": "http://example.com:3000", "status": 200, "headers": {}}]
+    assert captured["results"]["Endpoint Discovery"][0]["endpoints"][0]["path"] == "/api"
+
+
 def test_main_rejects_target_outside_scope(monkeypatch, tmp_path):
     scope = tmp_path / "scope.txt"
     scope.write_text("allowed.example.com\n", encoding="utf-8")
