@@ -1,16 +1,51 @@
 # ActiveRecon
 
-**ActiveRecon** is a Python-based reconnaissance CLI tool designed for authorized security assessments, lab environments, and security learning.
+<div align="center">
 
-It automates parts of early reconnaissance by combining **Nmap scanning, DNS analysis, HTTP service detection, TLS checks, header collection, JSON output, and Markdown reporting** into a structured workflow.
+![Python](https://img.shields.io/badge/Python-3.6%2B-blue?style=for-the-badge\&logo=python)
+![Nmap](https://img.shields.io/badge/Nmap-Reconnaissance-lightgrey?style=for-the-badge)
+![Security](https://img.shields.io/badge/Security-Authorized%20Testing-red?style=for-the-badge)
+![Reports](https://img.shields.io/badge/Reports-Markdown%20%2B%20JSON-green?style=for-the-badge)
+![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20Windows-informational?style=for-the-badge)
+![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)
+
+**A Python-based reconnaissance CLI tool for authorized security assessments, lab environments, and security learning.**
+
+ActiveRecon combines **Nmap scanning, DNS analysis, HTTP service detection, TLS checks, header collection, JSON output, Markdown reporting, and interesting signal generation** into a structured recon workflow.
+
+</div>
+
+---
+
+## Demo
+
+> Terminal demo GIF coming soon.
+
+```text
+docs/demo.gif
+```
+
+When added, place it here:
+
+```markdown
+![ActiveRecon Demo](docs/demo.gif)
+```
+
+---
+
+## Responsible Use
 
 > **Important:** Only scan systems that you own or have explicit written permission to assess.
+
+ActiveRecon is an active reconnaissance tool. It may generate network traffic that can be detected by monitoring systems.
+
+Do not use ActiveRecon against systems, networks, bug bounty targets, or production environments without clear authorization and defined scope.
 
 ---
 
 ## Overview
 
-ActiveRecon helps organize common reconnaissance tasks into a repeatable command-line workflow.
+ActiveRecon helps organize early-stage reconnaissance into a repeatable command-line workflow.
 
 Instead of manually running separate commands and collecting notes from different tools, ActiveRecon can:
 
@@ -18,114 +53,119 @@ Instead of manually running separate commands and collecting notes from differen
 * check local setup with a no-scan doctor command
 * identify open services
 * detect HTTP services from scan results
-* collect HTTP status, headers, redirects, page titles, and simple technology hints
+* collect HTTP status, headers, redirects, page titles, and technology hints
 * collect TLS certificate metadata for HTTPS services
 * query common DNS records
 * generate Markdown and JSON reports
 * highlight interesting signals for follow-up review
 
-This project is intended for learning, lab use, and authorized testing.
+This project is intended for learning, lab use, portfolio development, and authorized testing.
 
 ---
 
 ## Features
 
-### Nmap Scanning
+### Reconnaissance Workflow
 
-Run predefined Nmap scan profiles from `activerecon/modules/config/config.yaml`.
+ActiveRecon currently supports:
 
-ActiveRecon resolves the Nmap executable by checking:
-
-* an optional `nmap_executable` or `nmap_path` config value
-* `nmap` in `PATH`
-* common Windows install paths
-
-Nmap scans also use the `nmap_timeout` config value, which defaults to `300` seconds.
-
-Current scan profiles:
-
-* `fast`
-* `standard`
-* `full`
-* `udp`
-
-### DNS Analysis
-
-Query common DNS records for the target domain:
-
-* A records
-* MX records
-* TXT records
-
-DNS analysis is skipped automatically for IP address targets such as `127.0.0.1` or `::1`.
-
-### HTTP Analysis
-
-ActiveRecon identifies HTTP services from Nmap results and collects:
-
-* common HTTP, HTTPS, and local web development ports, even when Nmap guesses a generic service name
-* constructed HTTP/HTTPS URLs
-* status codes
-* final URL and redirect chain
-* page title
-* response headers
-* common security header presence/missing state
-* simple technology hints from HTTP headers
-* timeout and request errors
-
-### TLS Analysis
-
-For HTTPS services, ActiveRecon collects:
-
-* negotiated TLS version
-* cipher name
-* certificate subject and issuer
-* certificate validity dates
-* DNS Subject Alternative Names
-
-### Reports and Findings
-
-Reports include:
-
-* summary counts
-* target information
-* host status
-* scan information
-* port scan results
-* HTTP results
-* TLS results
-* DNS results
-* interesting signals
-* error details where applicable
-
-By default, ActiveRecon writes both Markdown and JSON reports.
-
-Markdown reports use the heading `Interesting Signals`. JSON output keeps the `Attention` key for compatibility.
+| Area      | Capability                                                 |
+| --------- | ---------------------------------------------------------- |
+| Nmap      | Predefined scan profiles, XML parsing, timeout handling    |
+| HTTP      | Status codes, titles, redirects, headers, technology hints |
+| TLS       | TLS version, cipher, certificate metadata                  |
+| DNS       | A, MX, and TXT lookups                                     |
+| Reporting | Markdown and JSON output                                   |
+| Safety    | Scope guard, dry-run mode, doctor checks                   |
+| Analysis  | Interesting signals for follow-up review                   |
 
 ---
 
-## Example Workflow
+## Scan Profiles
+
+Scan profiles are configured in:
+
+```text
+activerecon/modules/config/config.yaml
+```
+
+Current profiles:
+
+| Profile    | Purpose                                                          |
+| ---------- | ---------------------------------------------------------------- |
+| `fast`     | Quick scan using top ports                                       |
+| `web`      | Web-focused scan for common HTTP/HTTPS and development ports     |
+| `standard` | More detailed TCP scan with service and default script detection |
+| `full`     | Full TCP port scan with service and default script detection     |
+| `udp`      | UDP scan using top UDP ports and script timeout                  |
+
+---
+
+## Example Usage
+
+Run a quick scan:
 
 ```bash
 activerecon --target example.com --scan-profile fast
+```
+
+Run a web-focused scan:
+
+```bash
+activerecon --target 127.0.0.1 --scan-profile web --output juice-shop
+```
+
+Run a full TCP scan:
+
+```bash
+activerecon --target 127.0.0.1 --scan-profile full --output localhost-full
+```
+
+Check local setup without scanning:
+
+```bash
 activerecon --doctor
 ```
 
-The recon command will:
+Use a scope file:
 
-1. Run the selected Nmap scan profile against the target.
-2. Parse the Nmap XML output.
-3. Identify HTTP services from open ports.
-4. Collect HTTP status, header, redirect, title, and fingerprint details.
-5. Collect TLS metadata for HTTPS services.
-6. Query DNS records.
-7. Generate Markdown and JSON reports.
+```bash
+activerecon --target app.example.com --scope scope.txt --scan-profile standard
+```
 
-By default, reports are saved under `reports/` with timestamped filenames:
+---
+
+## Example Report Output
+
+ActiveRecon generates timestamped reports under `reports/` by default:
 
 ```text
 reports/example.com_20260617_090807.md
 reports/example.com_20260617_090807.json
+```
+
+Generated Markdown reports include sections such as:
+
+```markdown
+# Active Recon Report
+
+## Summary
+## Scan Information
+## Port Scan Results
+## HTTP Analysis
+## TLS Analysis
+## DNS Analysis
+## Interesting Signals
+```
+
+Example interesting signals:
+
+```text
+INFO   [http]       HTTP service detected on port 3000
+LOW    [http]       Missing Content-Security-Policy header
+INFO   [cors]       Wildcard CORS header observed
+INFO   [endpoint]   Interesting path found in response header
+INFO   [technology] X-Powered-By header exposed
 ```
 
 ---
@@ -146,12 +186,24 @@ sudo apt-get update
 sudo apt-get install nmap
 ```
 
+On Windows, install Nmap from the official installer and make sure `nmap.exe` is available in PATH.
+
+ActiveRecon also attempts to resolve Nmap from common Windows install paths.
+
+---
+
 ### Install from GitHub
 
 ```bash
 git clone https://github.com/CamiloCod3/ActiveRecon.git
 cd ActiveRecon
 pip install .
+```
+
+For local development:
+
+```bash
+pip install -e .
 ```
 
 ---
@@ -163,66 +215,50 @@ activerecon --target <IP_OR_DOMAIN> --scan-profile <PROFILE> [--output <OUTPUT_F
 activerecon --doctor
 ```
 
-### Examples
-
-```bash
-activerecon --target example.com --scan-profile fast
-activerecon --target example.com --scan-profile fast --output-format json --output reports/example.json
-activerecon --target app.example.com --scope scope.txt --scan-profile standard
-activerecon --target example.com --scan-profile fast --dry-run
-activerecon --target example.com --scan-profile fast --verbose
-activerecon --doctor
-```
-
 ### Arguments
 
-| Argument | Description |
-| --- | --- |
-| `--target` | Target IP address or domain name |
-| `--doctor` | Check Python, Nmap, config loading, and report directory write access without scanning |
-| `--scan-profile` | Nmap scan profile to use |
-| `--output` | Optional report name or path. Bare names are saved as `reports/<name>_<timestamp>.<ext>` |
-| `--output-format` | `md`, `json`, or `both`. Defaults to `both` |
-| `--scope` | Optional file with allowed domains, IPs, or CIDR ranges |
-| `--dry-run` | Validate arguments and planned outputs without scanning |
-| `--verbose` | Show debug logging |
-| `--quiet` | Show only warnings and errors |
+| Argument          | Description                                                                            |
+| ----------------- | -------------------------------------------------------------------------------------- |
+| `--target`        | Target IP address or domain name                                                       |
+| `--doctor`        | Check Python, Nmap, config loading, and report directory write access without scanning |
+| `--scan-profile`  | Nmap scan profile to use                                                               |
+| `--output`        | Optional report name or path                                                           |
+| `--output-format` | `md`, `json`, or `both`. Defaults to `both`                                            |
+| `--scope`         | Optional file with allowed domains, IPs, or CIDR ranges                                |
+| `--dry-run`       | Validate arguments and planned outputs without scanning                                |
+| `--verbose`       | Show debug logging                                                                     |
+| `--quiet`         | Show only warnings and errors                                                          |
 
-When `--output` is omitted, the target name is used:
+---
 
-```text
-reports/example.com_20260617_090807.md
-reports/example.com_20260617_090807.json
-```
+## Config
 
-When `--output report.md` is provided, `report` becomes the report basename and the files still land in `reports/` with a timestamp:
+Common config values live in:
 
 ```text
-reports/report_20260617_090807.md
-reports/report_20260617_090807.json
+activerecon/modules/config/config.yaml
 ```
 
-### Available Scan Profiles
-
-| Profile | Purpose |
-| --- | --- |
-| `fast` | Quick scan using top ports |
-| `standard` | More detailed TCP scan with service and default script detection |
-| `full` | Full TCP port scan with service and default script detection |
-| `udp` | UDP scan using top UDP ports and script timeout |
-
-### Config Values
-
-Common config values live in `activerecon/modules/config/config.yaml`:
+Example:
 
 ```yaml
 http_timeout: 5
 nmap_timeout: 300
+
 # Optional override if Nmap is installed outside PATH.
 # nmap_executable: "C:\\Program Files\\Nmap\\nmap.exe"
+
+scan_profiles:
+  fast: "-Pn -n -sT --top-ports 100 -T4"
+  web: "-Pn -n -sT -p 80,443,3000,5000,8000,8080,8443,9000,9443 -sV -T3"
+  standard: "-Pn -n -sT -sV -sC -T3"
+  full: "-Pn -n -sT -p- -sV -sC -T4"
+  udp: "-Pn -n -sU --top-ports 100 -sC --script-timeout 5m"
 ```
 
-### Scope Guard
+---
+
+## Scope Guard
 
 Use `--scope` to require the target to match an allowed domain, IP address, or CIDR range before any scan runs.
 
@@ -233,7 +269,19 @@ example.com
 192.0.2.0/24
 ```
 
-Subdomains are allowed when the parent domain is listed. For example, `example.com` allows `app.example.com`.
+Subdomains are allowed when the parent domain is listed.
+
+For example:
+
+```text
+example.com
+```
+
+allows:
+
+```text
+app.example.com
+```
 
 ---
 
@@ -250,7 +298,17 @@ The JSON report uses a simple stable wrapper:
 }
 ```
 
-The `results` object contains the same sections used by the Markdown report, including `Nmap Scan`, `HTTP Analysis`, `TLS Analysis`, `DNS Analysis`, and `Attention`.
+The `results` object contains the same major sections used by the Markdown report, including:
+
+```text
+Nmap Scan
+HTTP Analysis
+TLS Analysis
+DNS Analysis
+Attention
+```
+
+Markdown reports use the heading `Interesting Signals`. JSON output keeps the `Attention` key for compatibility.
 
 ---
 
@@ -283,52 +341,6 @@ ActiveRecon/
 
 ---
 
-## Report Sections
-
-Generated Markdown reports include sections such as:
-
-```markdown
-# Active Recon Report
-
-## Summary
-## Scan Information
-## Port Scan Results
-## HTTP Analysis
-## TLS Analysis
-## DNS Analysis
-## Interesting Signals
-```
-
----
-
-## Security and Responsible Use
-
-ActiveRecon is an active reconnaissance tool. It may generate network traffic that can be detected by monitoring systems.
-
-Use this tool only when you have permission to test the target.
-
-Do not use ActiveRecon against:
-
-* systems you do not own
-* public targets without authorization
-* bug bounty programs outside the defined scope
-* production systems without approval
-* networks where scanning is prohibited
-
-When using this tool in bug bounty or lab environments, always confirm the scope and rules of engagement before scanning.
-
----
-
-## Roadmap
-
-Planned improvements include:
-
-* multi-target scanning
-* screenshot support for HTTP services
-* modern Python packaging with `pyproject.toml`
-
----
-
 ## Skills Demonstrated
 
 This project demonstrates practical skills in:
@@ -344,6 +356,18 @@ This project demonstrates practical skills in:
 * modular Python project structure
 * security-focused scripting
 * authorized reconnaissance methodology
+
+---
+
+## Roadmap
+
+Planned improvements include:
+
+* richer web scanning for the `web` profile
+* endpoint discovery from HTML, headers, and JavaScript
+* multi-target scanning
+* screenshot support for HTTP services
+* modern Python packaging with `pyproject.toml`
 
 ---
 
