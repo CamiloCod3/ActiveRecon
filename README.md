@@ -91,7 +91,7 @@ Reports include:
 * target information
 * host status
 * scan information
-* open ports
+* port scan results
 * HTTP results
 * TLS results
 * DNS results

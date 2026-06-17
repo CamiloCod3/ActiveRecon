@@ -1,3 +1,4 @@
+import ipaddress
 import logging
 from pathlib import Path
 
@@ -8,6 +9,40 @@ def _format_error(error):
 
 def _as_list(value):
     return value if isinstance(value, list) else []
+
+
+def _looks_local_or_private(value):
+    text = str(value or "").strip()
+    if text.lower() == "localhost":
+        return True
+    try:
+        address = ipaddress.ip_address(text)
+        return address.is_loopback or address.is_private
+    except ValueError:
+        return False
+
+
+def _scan_context_note(target, nmap_results):
+    if _looks_local_or_private(target) or _looks_local_or_private(nmap_results.get("host")):
+        return (
+            "Target appears to be local or private. Results may include local system, "
+            "development, Docker, virtualization, or lab services."
+        )
+    return None
+
+
+def _is_https_http_item(item):
+    url = str(item.get("final_url") or item.get("url") or "").lower()
+    return url.startswith("https://")
+
+
+def _visible_missing_security_headers(item):
+    headers = item.get("missing_security_headers", [])
+    if not isinstance(headers, list):
+        return []
+    if _is_https_http_item(item):
+        return headers
+    return [header for header in headers if header != "strict-transport-security"]
 
 
 def _write_markdown_list(f, label, values):
@@ -28,7 +63,7 @@ def _write_http_result(f, item):
         f.write(f"- **Final URL:** {item['final_url']}\n")
 
     _write_markdown_list(f, "Redirect Chain", item.get("redirect_chain", []))
-    _write_markdown_list(f, "Missing Security Headers", item.get("missing_security_headers", []))
+    _write_markdown_list(f, "Missing Security Headers", _visible_missing_security_headers(item))
     _write_markdown_list(f, "Technology Hints", item.get("technology_hints", []))
 
     headers = item.get("headers", {})
@@ -82,6 +117,9 @@ def generate_report(target, results, output_file):
         f.write("# Active Recon Report\n\n")
         f.write(f"**Target:** {target}\n")
         f.write(f"**Host Status:** {nmap_results.get('status', {}).get('state', 'Unknown')}\n")
+        scan_context_note = _scan_context_note(target, nmap_results)
+        if scan_context_note:
+            f.write(f"**Scan Context:** {scan_context_note}\n")
         f.write("---\n\n")
 
         summary = build_report_summary(results)
@@ -106,12 +144,19 @@ def generate_report(target, results, output_file):
         f.write("## Port Scan Results\n\n")
         ports = nmap_results.get("ports", [])
         if ports:
-            for port in ports:
-                f.write(
-                    f"- **Port:** {port.get('portid', 'N/A')}/{port.get('protocol', 'N/A')} "
-                    f"- **State:** {port.get('state', 'unknown')} "
-                    f"- **Service:** {port.get('service', 'Unknown')}\n"
-                )
+            open_ports = [port for port in ports if port.get("state") == "open"]
+            other_ports = [port for port in ports if port.get("state") != "open"]
+            for title, port_group in (("Open Ports", open_ports), ("Other Results", other_ports)):
+                if not port_group:
+                    continue
+                f.write(f"### {title}\n\n")
+                for port in port_group:
+                    f.write(
+                        f"- **Port:** {port.get('portid', 'N/A')}/{port.get('protocol', 'N/A')} "
+                        f"- **State:** {port.get('state', 'unknown')} "
+                        f"- **Service:** {port.get('service', 'Unknown')}\n"
+                    )
+                f.write("\n")
         else:
             f.write("No port scan results found.\n")
         f.write("---\n\n")

@@ -49,6 +49,25 @@ def test_generate_attention_findings_only_reports_open_http_ports():
     assert "Sensitive remote access service exposed on port 23" not in messages
 
 
+def test_generate_attention_findings_reports_smb_rdp_and_rpc_exposure():
+    results = {
+        "Nmap Scan": {
+            "ports": [
+                {"portid": "445", "service": "microsoft-ds", "state": "open"},
+                {"portid": "3389", "service": "ms-wbt-server", "state": "open"},
+                {"portid": "135", "service": "msrpc", "state": "open"},
+            ],
+        },
+    }
+
+    findings = generate_attention_findings(results)
+    by_message = {item["message"]: item for item in findings}
+
+    assert by_message["SMB service exposed on port 445"]["severity"] == "medium"
+    assert by_message["Sensitive remote access service exposed on port 3389"]["severity"] == "medium"
+    assert by_message["RPC endpoint mapper observed on port 135"]["severity"] == "info"
+
+
 def test_generate_attention_findings_reports_hsts_only_for_https():
     results = {
         "HTTP Analysis": [
@@ -89,6 +108,7 @@ def test_generate_attention_findings_reports_cors_and_header_paths_as_info():
             "headers": {
                 "Access-Control-Allow-Origin": "*",
                 "X-Recruiting": "/#/jobs",
+                "X-Powered-By": "Express",
                 "X-Plain": "no path here",
             },
         }],
@@ -97,6 +117,7 @@ def test_generate_attention_findings_reports_cors_and_header_paths_as_info():
     findings = generate_attention_findings(results)
     cors_finding = next(item for item in findings if item["category"] == "cors")
     endpoint_finding = next(item for item in findings if item["category"] == "endpoint")
+    technology_finding = next(item for item in findings if item["category"] == "technology")
 
     assert cors_finding["severity"] == "info"
     assert cors_finding["message"] == "Wildcard CORS header observed"
@@ -104,6 +125,9 @@ def test_generate_attention_findings_reports_cors_and_header_paths_as_info():
     assert endpoint_finding["severity"] == "info"
     assert endpoint_finding["message"] == "Interesting path found in response header X-Recruiting"
     assert endpoint_finding["evidence"] == "/#/jobs"
+    assert technology_finding["severity"] == "info"
+    assert technology_finding["message"] == "X-Powered-By header exposed"
+    assert technology_finding["evidence"] == "Express - http://example.com"
     assert all(item.get("evidence") != "no path here" for item in findings)
 
 
