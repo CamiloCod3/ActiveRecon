@@ -2,20 +2,13 @@ import argparse
 import json
 import logging
 
+from .cli_output import print_report_paths, print_scan_summary
+from .commands.scope_command import run_scope_command
+from .commands.targets_command import run_targets_command
 from .models import ReconOptions
 from .modules.doctor import run_doctor
-from .modules.json_report import build_json_summary
 from .output_paths import DEFAULT_REPORT_DIR
-from .policies.scope_policy import ScopePolicy
 from .runner import ReconValidationError, run_recon
-from .targets.target_diff import diff_inventories
-from .targets.target_inventory import (
-    build_inventory,
-    export_scope_file,
-    load_inventory,
-    save_inventory,
-)
-from .targets.target_loader import load_targets
 
 
 LOG_FORMAT = "%(asctime)s - %(levelname)s - %(message)s"
@@ -107,131 +100,6 @@ def options_from_args(args):
         verbose=args.verbose,
         quiet=args.quiet,
     )
-
-
-def _as_list(value):
-    return value if isinstance(value, list) else []
-
-
-def _dns_summary(result, summary):
-    dns_results = result.results.get("DNS Analysis", {})
-    if isinstance(dns_results, dict) and dns_results.get("skipped"):
-        return "skipped for IP target"
-    return f"{summary['dns_records']} records"
-
-
-def _endpoint_count(result, summary):
-    if "Endpoint Discovery" not in result.results:
-        return None
-    return summary["endpoint_count"]
-
-
-def _report_paths(result):
-    paths = []
-    if result.markdown_output:
-        paths.append(("Markdown", result.markdown_output))
-    if result.json_output:
-        paths.append(("JSON", result.json_output))
-    return paths
-
-
-def _inventory_host_count(inventory):
-    return len({
-        item.get("host")
-        for item in inventory.get("targets", [])
-        if item.get("host")
-    })
-
-
-def print_report_paths(result, output=print):
-    paths = _report_paths(result)
-    if not paths:
-        return
-    for label, path in paths:
-        output(f"{label}: {path}")
-
-
-def print_scan_summary(result, output=print):
-    summary = build_json_summary(result.results)
-    endpoint_count = _endpoint_count(result, summary)
-
-    title = "ActiveRecon dry run completed" if result.dry_run else "ActiveRecon scan completed"
-    output(title)
-    output("")
-    output(f"Target: {result.target}")
-    output(f"Profile: {result.scan_profile}")
-    output("")
-
-    if result.dry_run:
-        output("No scan executed.")
-    else:
-        output(f"Nmap: {summary['total_ports_listed']} ports listed, {summary['open_ports']} open")
-        output(f"HTTP: {summary['http_services']} service analyzed")
-        output(f"TLS: {summary['tls_results']} HTTPS services analyzed")
-        output(f"DNS: {_dns_summary(result, summary)}")
-        if endpoint_count is not None:
-            output(f"Endpoints: {endpoint_count} discovered")
-        output(f"Interesting Signals: {summary['interesting_signals']}")
-
-    paths = _report_paths(result)
-    if paths:
-        output("")
-        output("Reports:")
-        for label, path in paths:
-            output(f"- {label}: {path}")
-
-
-def run_targets_command(args, output=print):
-    if args.targets_action == "import":
-        raw_targets = load_targets(args.input)
-        inventory = build_inventory(raw_targets, source=args.input)
-        save_inventory(inventory, args.output)
-        output("ActiveRecon target import completed")
-        output(f"Input: {args.input}")
-        output(f"Output: {args.output}")
-        output(f"Targets loaded: {len(raw_targets)}")
-        output(f"Unique targets: {len(inventory['targets'])}")
-        output(f"Duplicates removed: {len(raw_targets) - len(inventory['targets'])}")
-        output("Scans run: 0")
-        return 0
-
-    if args.targets_action == "diff":
-        previous = load_inventory(args.previous)
-        current = load_inventory(args.current)
-        diff = diff_inventories(previous, current)
-        output("ActiveRecon target diff completed")
-        output(f"Added: {len(diff['added'])}")
-        output(f"Removed: {len(diff['removed'])}")
-        output(f"Unchanged: {len(diff['unchanged'])}")
-        output("Scans run: 0")
-        return 0
-
-    if args.targets_action == "export-scope":
-        inventory = load_inventory(args.inventory)
-        export_scope_file(inventory, args.output)
-        output("ActiveRecon scope export completed")
-        output(f"Inventory: {args.inventory}")
-        output(f"Output: {args.output}")
-        output(f"Targets exported: {_inventory_host_count(inventory)}")
-        output("Scans run: 0")
-        return 0
-
-    raise ValueError("targets requires a subcommand: import, diff, or export-scope")
-
-
-def run_scope_command(args, output=print):
-    if args.scope_action != "check":
-        raise ValueError("scope requires a subcommand: check")
-
-    evaluation = ScopePolicy.from_file(args.scope).evaluate(args.target)
-    output("ActiveRecon scope check completed")
-    output(f"Target: {args.target}")
-    output(f"Scope: {args.scope}")
-    output(f"Allowed: {'yes' if evaluation['allowed'] else 'no'}")
-    output(f"Reason: {evaluation['reason']}")
-    output(f"Program: {evaluation.get('program') or 'N/A'}")
-    output("Scans run: 0")
-    return 0
 
 
 def main(argv=None):
