@@ -37,6 +37,16 @@ reports/*
 !reports/.gitkeep
 report.md
 report.json
+# Local ActiveRecon generated files
+/inventories/
+/scopes/
+/targets.txt
+/target.txt
+/local_targets.txt
+
+# Local pytest temp dirs
+/.pytest_tmp/
+/.tmp/
 
 # Build/package output
 build/
