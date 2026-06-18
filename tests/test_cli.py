@@ -3,6 +3,7 @@ import json
 import pytest
 
 from activerecon import cli
+from activerecon.commands import discover_command
 from activerecon.models import ReconOptions, ReconResult, TargetSpec
 from activerecon.targets.target_inventory import build_inventory, save_inventory
 
@@ -235,6 +236,33 @@ def test_cli_targets_export_scope_does_not_scan(monkeypatch, tmp_path, capsys):
     assert scope_file.read_text(encoding="utf-8").splitlines() == ["api.example.com"]
     assert "ActiveRecon scope export completed" in captured_output.out
     assert "Targets exported: 1" in captured_output.out
+    assert "Scans run: 0" in captured_output.out
+
+
+def test_cli_discover_subdomains_does_not_scan(monkeypatch, tmp_path, capsys):
+    output_file = tmp_path / "inventories" / "discovered.json"
+    monkeypatch.setattr(cli, "run_recon", lambda options: (_ for _ in ()).throw(AssertionError()))
+    monkeypatch.setattr(discover_command, "load_config", lambda: {})
+    monkeypatch.setattr(
+        discover_command,
+        "run_subfinder",
+        lambda domain, config: ["api.example.com", "api.example.com"],
+    )
+
+    result = cli.main([
+        "discover",
+        "subdomains",
+        "--domain",
+        "example.com",
+        "--output",
+        str(output_file),
+    ])
+    captured_output = capsys.readouterr()
+
+    assert result == 0
+    assert output_file.exists()
+    assert "ActiveRecon passive subdomain discovery completed" in captured_output.out
+    assert "Discovered: 1" in captured_output.out
     assert "Scans run: 0" in captured_output.out
 
 
