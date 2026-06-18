@@ -271,6 +271,36 @@ def test_cli_scope_check_allowed_and_runs_zero_scans(monkeypatch, tmp_path, caps
     assert "Scans run: 0" in captured_output.out
 
 
+def test_cli_scope_check_url_allow_still_runs_zero_scans(monkeypatch, tmp_path, capsys):
+    scope_file = tmp_path / "scope.json"
+    scope_file.write_text(
+        json.dumps({
+            "schema_version": "2.0",
+            "program": "Example Program",
+            "allowed": {"urls": ["https://api.example.com/login"]},
+            "denied": {},
+            "rules": {},
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli, "run_recon", lambda options: (_ for _ in ()).throw(AssertionError()))
+
+    result = cli.main([
+        "scope",
+        "check",
+        "--target",
+        "https://api.example.com/login",
+        "--scope",
+        str(scope_file),
+    ])
+    captured_output = capsys.readouterr()
+
+    assert result == 0
+    assert "Allowed: yes" in captured_output.out
+    assert "allowed.urls" in captured_output.out
+    assert "Scans run: 0" in captured_output.out
+
+
 def test_cli_scope_check_denied_and_runs_zero_scans(monkeypatch, tmp_path, capsys):
     scope_file = tmp_path / "scope.json"
     scope_file.write_text(

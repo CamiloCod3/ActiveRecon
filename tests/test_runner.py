@@ -55,6 +55,101 @@ def test_runner_smoke_with_mocked_modules(monkeypatch):
     assert captured["json_kwargs"]["scan_profile"] == "fast"
 
 
+def test_runner_url_target_normalizes_scan_host_and_preserves_raw_target(monkeypatch):
+    captured = {}
+    raw_target = "http://127.0.0.1:3000/"
+
+    def fake_output_paths(target, output, output_format):
+        captured["output_target"] = target
+        return _fixed_output_paths(target, output, output_format)
+
+    def fake_nmap(target, scan_command, config):
+        captured["nmap_target"] = target
+        return {
+            "target": target,
+            "ports": [{"portid": "3000", "protocol": "tcp", "state": "open", "service": "ppp"}],
+            "status": {"state": "up"},
+            "scan_info": {},
+            "host": target,
+        }
+
+    def fake_http(target, config, http_ports):
+        captured["http_target"] = target
+        captured["http_ports"] = http_ports
+        return [{"url": "http://127.0.0.1:3000", "status": 200, "headers": {}}]
+
+    def fake_report(target, results, output_file):
+        captured["markdown_target"] = target
+
+    def fake_json_report(target, results, output_file, **kwargs):
+        captured["json_target"] = target
+
+    monkeypatch.setattr(runner, "CONFIG", {"scan_profiles": {"web": "-web"}, "http_timeout": 5})
+    monkeypatch.setattr(runner, "build_output_paths", fake_output_paths)
+    monkeypatch.setattr(runner, "run_nmap_scan", fake_nmap)
+    monkeypatch.setattr(runner, "analyze_http", fake_http)
+    monkeypatch.setattr(runner, "analyze_tls", lambda http_results, timeout: [])
+    monkeypatch.setattr(
+        runner,
+        "analyze_dns",
+        lambda target: (_ for _ in ()).throw(AssertionError("DNS should be skipped for IP targets")),
+    )
+    monkeypatch.setattr(runner, "generate_attention_findings", lambda results: [])
+    monkeypatch.setattr(runner, "generate_report", fake_report)
+    monkeypatch.setattr(runner, "generate_json_report", fake_json_report)
+
+    result = runner.run_recon(ReconOptions(target=raw_target, scan_profile="web"))
+
+    assert captured["nmap_target"] == "127.0.0.1"
+    assert captured["http_target"] == "127.0.0.1"
+    assert captured["output_target"] == raw_target
+    assert captured["markdown_target"] == raw_target
+    assert captured["json_target"] == raw_target
+    assert result.target == raw_target
+    assert result.target_spec.host == "127.0.0.1"
+    assert result.results["Nmap Scan"]["target"] == "127.0.0.1"
+    assert result.results["HTTP Analysis"][0]["url"] == "http://127.0.0.1:3000"
+
+
+def test_runner_url_domain_uses_normalized_host_for_dns(monkeypatch):
+    captured = {}
+
+    monkeypatch.setattr(runner, "CONFIG", {"scan_profiles": {"fast": "-Pn"}, "http_timeout": 5})
+    monkeypatch.setattr(runner, "build_output_paths", _fixed_output_paths)
+    monkeypatch.setattr(
+        runner,
+        "run_nmap_scan",
+        lambda target, scan_command, config: {
+            "target": target,
+            "ports": [],
+            "status": {"state": "up"},
+            "scan_info": {},
+            "host": target,
+        },
+    )
+    monkeypatch.setattr(
+        runner,
+        "analyze_http",
+        lambda target, config, http_ports: (_ for _ in ()).throw(AssertionError("No HTTP expected")),
+    )
+    monkeypatch.setattr(runner, "analyze_tls", lambda http_results, timeout: [])
+
+    def fake_dns(target):
+        captured["dns_target"] = target
+        return {"A": [], "MX": [], "TXT": []}
+
+    monkeypatch.setattr(runner, "analyze_dns", fake_dns)
+    monkeypatch.setattr(runner, "generate_attention_findings", lambda results: [])
+    monkeypatch.setattr(runner, "generate_report", lambda target, results, output_file: None)
+    monkeypatch.setattr(runner, "generate_json_report", lambda target, results, output_file, **kwargs: None)
+
+    result = runner.run_recon(ReconOptions(target="https://api.example.com/login", scan_profile="fast"))
+
+    assert result.target == "https://api.example.com/login"
+    assert result.results["Nmap Scan"]["target"] == "api.example.com"
+    assert captured["dns_target"] == "api.example.com"
+
+
 def test_runner_handles_failed_nmap_without_http(monkeypatch):
     captured = {}
 

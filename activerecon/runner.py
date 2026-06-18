@@ -71,14 +71,16 @@ def _validate_scope(target, scope_file):
 def run_recon(options: ReconOptions) -> ReconResult:
     config = _load_config()
     scan_command = _scan_command(config, options.scan_profile)
-    target_spec = parse_target(options.target)
+    raw_target = options.target
+    target_spec = parse_target(raw_target)
+    scan_host = target_spec.host or raw_target
     markdown_output, json_output = build_output_paths(
-        options.target,
+        raw_target,
         options.output,
         options.output_format,
     )
     recon_result = ReconResult(
-        target=options.target,
+        target=raw_target,
         target_spec=target_spec,
         scan_profile=options.scan_profile,
         markdown_output=markdown_output,
@@ -86,9 +88,9 @@ def run_recon(options: ReconOptions) -> ReconResult:
         dry_run=options.dry_run,
     )
 
-    _validate_scope(options.target, options.scope)
+    _validate_scope(raw_target, options.scope)
 
-    logging.info(f"Starting automated recon on target: {options.target}")
+    logging.info(f"Starting automated recon on target: {raw_target}")
     logging.info(f"Using scan profile: {options.scan_profile} ({scan_command})")
     if markdown_output:
         logging.info(f"Markdown report path: {markdown_output}")
@@ -102,10 +104,10 @@ def run_recon(options: ReconOptions) -> ReconResult:
     results = recon_result.results
 
     try:
-        nmap_results = run_nmap_scan(options.target, scan_command, config)
+        nmap_results = run_nmap_scan(scan_host, scan_command, config)
         if not isinstance(nmap_results, dict):
             nmap_results = {
-                "target": options.target,
+                "target": scan_host,
                 "ports": [],
                 "error": "Nmap scan returned invalid results",
             }
@@ -116,14 +118,14 @@ def run_recon(options: ReconOptions) -> ReconResult:
             logging.info(f"Nmap scan completed successfully. Found {len(nmap_results.get('ports', []))} ports.")
     except Exception as e:
         logging.error(f"Error during Nmap scan: {e}")
-        nmap_results = {"target": options.target, "ports": [], "error": f"Nmap scan failed: {e}"}
+        nmap_results = {"target": scan_host, "ports": [], "error": f"Nmap scan failed: {e}"}
         results["Nmap Scan"] = nmap_results
 
     http_ports = get_http_ports(nmap_results)
     if http_ports:
         try:
             logging.info(f"HTTP services found: {http_ports}. Running HTTP analysis.")
-            results["HTTP Analysis"] = analyze_http(options.target, config, http_ports)
+            results["HTTP Analysis"] = analyze_http(scan_host, config, http_ports)
         except Exception as e:
             logging.error(f"Error during HTTP analysis: {e}")
             results["HTTP Analysis"] = {"error": f"HTTP analysis failed: {e}"}
@@ -152,7 +154,7 @@ def run_recon(options: ReconOptions) -> ReconResult:
     else:
         try:
             logging.info("Running DNS analysis.")
-            results["DNS Analysis"] = analyze_dns(options.target)
+            results["DNS Analysis"] = analyze_dns(scan_host)
         except Exception as e:
             logging.error(f"Error during DNS analysis: {e}")
             results["DNS Analysis"] = {"error": f"DNS analysis failed: {e}"}
@@ -163,14 +165,14 @@ def run_recon(options: ReconOptions) -> ReconResult:
 
     if markdown_output:
         try:
-            generate_report(options.target, results, markdown_output)
+            generate_report(raw_target, results, markdown_output)
             logging.info(f"Markdown report saved to {markdown_output}")
         except Exception as e:
             logging.error(f"Error during Markdown report generation: {e}")
 
     if json_output:
         try:
-            generate_json_report(options.target, results, json_output, scan_profile=options.scan_profile)
+            generate_json_report(raw_target, results, json_output, scan_profile=options.scan_profile)
             logging.info(f"JSON report saved to {json_output}")
         except Exception as e:
             logging.error(f"Error during JSON report generation: {e}")
