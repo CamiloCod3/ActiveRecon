@@ -25,6 +25,14 @@ Run a web-focused recon workflow and save timestamped Markdown and JSON reports 
 activerecon --target 127.0.0.1 --scan-profile web --output juice-shop
 ```
 
+Run a local OWASP Juice Shop lab scan with a URL target:
+
+```bash
+python -m activerecon.main --target http://127.0.0.1:3000/ --scope docs/examples/scopes/local_lab_scope.json --scan-profile web --output juice-shop
+```
+
+ActiveRecon accepts IP addresses, domain names, and URLs as targets.
+
 Check your local setup without scanning anything:
 
 ```bash
@@ -121,6 +129,12 @@ Run a web-focused scan:
 activerecon --target 127.0.0.1 --scan-profile web --output juice-shop
 ```
 
+Run a web-focused scan with a URL target:
+
+```bash
+python -m activerecon.main --target http://127.0.0.1:3000/ --scope docs/examples/scopes/local_lab_scope.json --scan-profile web --output juice-shop
+```
+
 Generate only JSON output:
 
 ```bash
@@ -151,22 +165,28 @@ Use a scope file:
 activerecon --target app.example.com --scope scope.txt --scan-profile standard
 ```
 
+Check a URL target against a JSON scope file without scanning:
+
+```bash
+python -m activerecon.main scope check --target http://127.0.0.1:3000/ --scope docs/examples/scopes/local_lab_scope.json
+```
+
 Import target inventory without scanning:
 
 ```bash
-activerecon targets import --input targets.txt --output inventories/latest.json
+python -m activerecon.main targets import --input docs/examples/lab/local_targets.txt --output inventories/local_lab.json
 ```
 
 Compare two inventories without scanning:
 
 ```bash
-activerecon targets diff --previous inventories/old.json --current inventories/latest.json
+python -m activerecon.main targets diff --previous inventories/old.json --current inventories/latest.json
 ```
 
 Export normalized inventory hosts to a scope file:
 
 ```bash
-activerecon targets export-scope --inventory inventories/latest.json --output scopes/latest.txt
+python -m activerecon.main targets export-scope --inventory inventories/local_lab.json --output scopes/local_lab.txt
 ```
 
 ---
@@ -259,7 +279,7 @@ pip install -e .
 ## Usage
 
 ```bash
-activerecon --target <IP_OR_DOMAIN> --scan-profile <PROFILE> [--output <OUTPUT_FILE>] [--output-format md|json|both] [--verbose|--quiet]
+activerecon --target <IP_DOMAIN_OR_URL> --scan-profile <PROFILE> [--output <OUTPUT_FILE>] [--output-format md|json|both] [--verbose|--quiet]
 activerecon --doctor
 activerecon targets import --input <TARGETS_FILE> --output <INVENTORY_JSON>
 activerecon targets diff --previous <OLD_JSON> --current <NEW_JSON>
@@ -271,7 +291,7 @@ activerecon scope check --target <TARGET> --scope <SCOPE_FILE>
 
 | Argument          | Description                                                                            |
 | ----------------- | -------------------------------------------------------------------------------------- |
-| `--target`        | Target IP address or domain name                                                       |
+| `--target`        | Target IP address, domain name, or URL                                                 |
 | `--doctor`        | Check Python, Nmap, config loading, and report directory write access without scanning |
 | `--scan-profile`  | Nmap scan profile to use                                                               |
 | `--output`        | Optional report name or path                                                           |
@@ -280,6 +300,28 @@ activerecon scope check --target <TARGET> --scope <SCOPE_FILE>
 | `--dry-run`       | Validate arguments and planned outputs without scanning                                |
 | `--verbose`       | Show detailed internal logs                                                            |
 | `--quiet`         | Suppress the normal summary and show only errors plus report paths                     |
+
+---
+
+## Target Formats
+
+ActiveRecon accepts:
+
+* IP addresses, such as `127.0.0.1`
+* domain names, such as `example.com`
+* URLs, such as `http://127.0.0.1:3000/`
+
+For scans, URL targets are normalized to their host before Nmap, HTTP analysis, and DNS analysis run. The original target string is still preserved in terminal output, Markdown reports, JSON reports, and generated report names.
+
+Example:
+
+```text
+raw target:    http://127.0.0.1:3000/
+scan host:     127.0.0.1
+report target: http://127.0.0.1:3000/
+```
+
+Scope validation uses the original target string, so JSON URL scope rules still work.
 
 ---
 
@@ -366,6 +408,8 @@ web_recon:
 
 Use `--scope` to require the target to match an allowed domain, IP address, or CIDR range before any scan runs.
 
+Both legacy text scope files and JSON scope files are supported.
+
 Example `scope.txt`:
 
 ```text
@@ -387,7 +431,7 @@ allows:
 app.example.com
 ```
 
-JSON scope files are also supported. Denied rules always override allowed rules.
+JSON scope files use schema version `2.0`. They support allowed and denied domains, wildcards, URLs, IP addresses, and CIDR ranges. Denied rules always override allowed rules.
 
 Supported JSON sections:
 
@@ -408,6 +452,12 @@ Check a target against a scope file without scanning:
 
 ```bash
 activerecon scope check --target api.example.com --scope docs/examples/scopes/example_program_scope.json
+```
+
+Check a local lab URL target without scanning:
+
+```bash
+python -m activerecon.main scope check --target http://127.0.0.1:3000/ --scope docs/examples/scopes/local_lab_scope.json
 ```
 
 Scope checks print the matched reason and always report `Scans run: 0`.
@@ -482,32 +532,63 @@ The JSON `endpoint_count` counts unique endpoint paths from the flat endpoint li
 
 ---
 
+## Generated Local Files
+
+ActiveRecon creates local output while testing and scanning. These files are generated artifacts and should normally stay out of commits:
+
+```text
+reports/
+inventories/
+scopes/
+.pytest_tmp/
+.tmp/
+```
+
+Keep documentation examples under `docs/examples/`; keep local scan output in generated folders.
+
+---
+
 ## Project Structure
 
 ```text
 ActiveRecon/
 |-- activerecon/
+|   |-- cli.py
+|   |-- cli_output.py
 |   |-- main.py
-|   `-- modules/
-|       |-- config/
-|       |   `-- config.yaml
-|       |-- config_loader.py
-|       |-- dns_analysis.py
-|       |-- doctor.py
-|       |-- endpoint_discovery.py
-|       |-- http_enum.py
-|       |-- json_report.py
-|       |-- nmap_scan.py
-|       |-- report_generator.py
-|       |-- risk_analysis.py
-|       |-- scope_guard.py
-|       `-- tls_analysis.py
+|   |-- models.py
+|   |-- output_paths.py
+|   |-- runner.py
+|   |-- workflows.py
+|   |-- commands/
+|   |   |-- scope_command.py
+|   |   `-- targets_command.py
+|   |-- modules/
+|   |   |-- config/
+|   |   |   `-- config.yaml
+|   |   |-- config_loader.py
+|   |   |-- dns_analysis.py
+|   |   |-- doctor.py
+|   |   |-- endpoint_categories.py
+|   |   |-- endpoint_discovery.py
+|   |   |-- http_enum.py
+|   |   |-- json_report.py
+|   |   |-- nmap_scan.py
+|   |   |-- report_generator.py
+|   |   |-- risk_analysis.py
+|   |   |-- scope_guard.py
+|   |   `-- tls_analysis.py
+|   |-- policies/
+|   |   `-- scope_policy.py
 |   |-- targets/
 |   |   |-- parser.py
 |   |   |-- target_diff.py
 |   |   |-- target_inventory.py
 |   |   `-- target_loader.py
-|-- reports/
+|-- docs/
+|   `-- examples/
+|       |-- lab/
+|       `-- scopes/
 |-- tests/
 |-- .github/workflows/
 |-- MANIFEST.in
@@ -539,10 +620,11 @@ This project demonstrates practical skills in:
 
 Possible future improvements include:
 
-* multi-target scanning
-* screenshot support for HTTP services
+* richer scope policy metadata and validation messages
+* inventory history views and cleaner inventory diff summaries
 * optional SARIF or CSV export
-* richer TLS and certificate risk checks
+* richer TLS and certificate review signals
+* explicit scope-aware batch scanning with safe limits and dry-run previews
 * modern Python packaging with `pyproject.toml`
 
 ---
