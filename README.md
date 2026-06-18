@@ -66,6 +66,7 @@ Instead of manually running separate commands and collecting notes from differen
 * query A, MX, and TXT DNS records, while skipping noisy DNS lookups for IP address targets
 * run endpoint discovery automatically from the `web` scan profile
 * import, normalize, deduplicate, diff, and export target inventories without scanning
+* run passive subdomain discovery through optional external `subfinder` without scanning
 * generate timestamped Markdown and JSON reports under `reports/`
 * highlight interesting signals for follow-up review
 
@@ -87,6 +88,7 @@ ActiveRecon currently supports:
 | DNS       | Separate A, MX, and TXT lookups, with clean IP-target skip behavior          |
 | Web       | Endpoint discovery from HTML, headers, JavaScript, robots.txt, and probes    |
 | Inventory | Target import, normalization, deduplication, diff, and scope export           |
+| Discovery | Passive subdomain discovery through optional external `subfinder`             |
 | Reporting | Timestamped Markdown and JSON schema `1.1` reports                           |
 | Safety    | Responsible-use notice, scope guard, dry-run mode, doctor checks             |
 | Analysis  | Low-noise interesting signals for follow-up review                           |
@@ -189,6 +191,12 @@ Export normalized inventory hosts to a scope file:
 python -m activerecon.main targets export-scope --inventory inventories/local_lab.json --output scopes/local_lab.txt
 ```
 
+Run passive subdomain discovery without scanning:
+
+```bash
+python -m activerecon.main discover subdomains --domain example.com --scope docs/examples/scopes/example_program_scope.json --output inventories/example_discovered.json
+```
+
 ---
 
 ## Example Report Output
@@ -285,6 +293,7 @@ activerecon targets import --input <TARGETS_FILE> --output <INVENTORY_JSON>
 activerecon targets diff --previous <OLD_JSON> --current <NEW_JSON>
 activerecon targets export-scope --inventory <INVENTORY_JSON> --output <SCOPE_FILE>
 activerecon scope check --target <TARGET> --scope <SCOPE_FILE>
+activerecon discover subdomains --domain <DOMAIN> [--scope <SCOPE_FILE>] --output <INVENTORY_JSON>
 ```
 
 ### Arguments
@@ -358,6 +367,39 @@ Scope export writes one normalized host per line, compatible with the current `-
 
 ---
 
+## Passive Subdomain Discovery
+
+ActiveRecon can optionally run passive subdomain discovery through the external `subfinder` CLI:
+
+```bash
+python -m activerecon.main discover subdomains --domain example.com --scope docs/examples/scopes/example_program_scope.json --output inventories/example_discovered.json
+```
+
+This command:
+
+* runs `subfinder -d <domain> -silent`
+* parses stdout lines
+* normalizes and deduplicates discovered targets using the inventory logic
+* evaluates each result against the scope file when `--scope` is provided
+* writes inventory-style JSON with provider and scope metadata
+* prints `Scans run: 0`
+
+This command does not run Nmap, HTTP probing, TLS checks, DNS analysis, endpoint discovery, Markdown/JSON scan reports, screenshots, nuclei, httpx, APIs, AI analysis, or batch scanning.
+
+`subfinder` is optional and must be installed separately. ActiveRecon does not install, vendor, or configure `subfinder` provider API keys. Subfinder manages its own provider configuration.
+
+ActiveRecon resolves `subfinder` from:
+
+```text
+subfinder_executable or subfinder_path in config
+PATH: subfinder or subfinder.exe
+~/go/bin/subfinder or ~/go/bin/subfinder.exe
+```
+
+Generated discovery inventories should be treated as local output and should normally not be committed.
+
+---
+
 ## Config
 
 Common config values live in:
@@ -374,6 +416,10 @@ nmap_timeout: 300
 
 # Optional override if Nmap is installed outside PATH.
 # nmap_executable: "C:\\Program Files\\Nmap\\nmap.exe"
+
+# Optional external passive discovery tool path.
+# subfinder_executable: "C:\\Tools\\subfinder.exe"
+# subfinder_timeout: 120
 
 scan_profiles:
   fast: "-Pn -n -sT --top-ports 100 -T4"
@@ -561,8 +607,11 @@ ActiveRecon/
 |   |-- runner.py
 |   |-- workflows.py
 |   |-- commands/
+|   |   |-- discover_command.py
 |   |   |-- scope_command.py
 |   |   `-- targets_command.py
+|   |-- discovery/
+|   |   `-- subfinder_provider.py
 |   |-- modules/
 |   |   |-- config/
 |   |   |   `-- config.yaml

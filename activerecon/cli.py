@@ -3,6 +3,7 @@ import json
 import logging
 
 from .cli_output import print_report_paths, print_scan_summary
+from .commands.discover_command import run_discover_command
 from .commands.scope_command import run_scope_command
 from .commands.targets_command import run_targets_command
 from .models import ReconOptions
@@ -86,6 +87,16 @@ def build_parser():
     check_parser = scope_subparsers.add_parser("check", help="Evaluate one target against a scope file")
     check_parser.add_argument("--target", required=True, help="Target IP, domain, or URL to evaluate")
     check_parser.add_argument("--scope", required=True, help="Scope file (.txt or .json)")
+
+    discover_parser = subparsers.add_parser("discover", help="Passive discovery commands")
+    discover_subparsers = discover_parser.add_subparsers(dest="discover_action")
+    subdomains_parser = discover_subparsers.add_parser(
+        "subdomains",
+        help="Collect subdomains with optional external subfinder",
+    )
+    subdomains_parser.add_argument("--domain", required=True, help="Base domain to pass to subfinder")
+    subdomains_parser.add_argument("--scope", help="Optional scope file for result classification")
+    subdomains_parser.add_argument("--output", required=True, help="Output inventory JSON file")
     return parser
 
 
@@ -125,6 +136,13 @@ def main(argv=None):
         try:
             return run_scope_command(args)
         except (OSError, ValueError, json.JSONDecodeError) as e:
+            parser.error(str(e))
+            return 2
+
+    if args.command == "discover":
+        try:
+            return run_discover_command(args)
+        except (OSError, ValueError, json.JSONDecodeError, RuntimeError) as e:
             parser.error(str(e))
             return 2
 
